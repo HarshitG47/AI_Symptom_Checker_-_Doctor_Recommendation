@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Brain, ClipboardList, Shield, ArrowRight,
+  Stethoscope, Brain, ClipboardList, Shield, ArrowRight,
   Activity, Zap, CheckCircle2
 } from 'lucide-react';
 import dooperLogo from '/dooperlogo.png';
