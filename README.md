@@ -2,11 +2,11 @@
 
 An advanced AI-powered Clinical Intelligence Engine that acts as a clinical decision-support system. Instead of relying solely on LLM responses, this system collects structured patient data and combines AI reasoning with a verified medical knowledge base (MedlinePlus API) to provide highly accurate, evidence-based health assessments, confidence scores, and emergency red-flag detection.
 
-This application replicates the modern, premium visual design language of the **Dooper** healthcare portal, using a custom Montserrat font, curated colors (Dooper Crimson Red `#E40443`), glassmorphic shadows, transitions, and support for a native Dark Mode.
+
 
 ---
 
-## 🏗️ Architecture Diagram
+## Architecture Diagram
 
 ```mermaid
 graph TD
@@ -22,7 +22,7 @@ graph TD
 
 ---
 
-## 🗄️ Database Design (MongoDB Schema)
+## Database Design (MongoDB Schema)
 
 **Assessment Schema (`server/models/Assessment.js`)**:
 - `user`: ObjectId (Ref to User)
@@ -50,7 +50,7 @@ graph TD
 
 ---
 
-## 🧠 AI Workflow & Knowledge Base
+## AI Workflow & Knowledge Base
 
 ### 1. Structured Data Collection
 Instead of a simple text box, the frontend collects structured clinical parameters (vitals, medical history, pain scale, primary/secondary symptoms).
@@ -69,7 +69,7 @@ Users can ask follow-up questions within the assessment context. The AI remember
 
 ---
 
-## 🚀 Tech Stack & APIs Used
+## Tech Stack & APIs Used
 
 ### Frontend (Client)
 - **Framework**: React.js (built with Vite)
@@ -82,12 +82,12 @@ Users can ask follow-up questions within the assessment context. The AI remember
 - **Auth**: JSON Web Tokens (JWT)
 
 ### External APIs
-- **OpenRouter API**: Access to leading open-source models (`gemma-4-31b`, `llama-3.3-70b`, etc.).
+- **OpenRouter API**: Access to leading models (`gemma-4-31b`, `llama-3.3-70b`, etc.).
 - **MedlinePlus Web Service API**: Publicly available, highly trusted health topics knowledge base used for context retrieval.
 
 ---
 
-## 🛠️ Features
+## Features
 
 1. **Intelligent Symptom Collection**: Structured patient information including vitals and primary/secondary symptom categorisation.
 2. **Top 3 Conditions & Confidence Scores**: AI ranks the most likely diagnoses.
@@ -100,7 +100,7 @@ Users can ask follow-up questions within the assessment context. The AI remember
 
 ---
 
-## ⚙️ Environment Variables
+## Environment Variables
 
 ### Backend (`server/.env`)
 ```env
@@ -117,7 +117,7 @@ VITE_API_URL=http://localhost:5000/api
 
 ---
 
-## 📦 Local Installation & Setup
+## Local Installation & Setup
 
 Ensure you have [Node.js](https://nodejs.org/) installed.
 
@@ -146,7 +146,7 @@ The frontend application will be running on [http://localhost:5173](http://local
 
 ---
 
-## ☁️ Deployment Instructions
+## Deployment Instructions
 
 ### Deploying the Backend (Node.js/Express) to Render
 1. Sign up on [Render](https://render.com/).
