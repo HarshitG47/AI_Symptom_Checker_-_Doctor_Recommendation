@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Stethoscope, Brain, ClipboardList, Shield, ArrowRight,
+  Brain, ClipboardList, Shield, ArrowRight,
   Activity, Zap, CheckCircle2
 } from 'lucide-react';
 import dooperLogo from '/dooperlogo.png';
@@ -90,7 +90,7 @@ const HomePage = () => {
 
           {/* Trust indicators */}
           <div className="mt-12 flex flex-wrap items-center justify-center gap-6 text-sm text-text-muted dark:text-slate-400">
-            {['Secure & Private', 'No Medical Data Stored', 'AI-Powered Insights'].map(t => (
+            {['Secure & Private', 'Data Encrypted & Secured', 'AI-Powered Insights'].map(t => (
               <span key={t} className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-green-500" />
                 {t}
@@ -177,10 +177,7 @@ const HomePage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center">
-                <Stethoscope className="w-4 h-4 text-white" />
-              </div>
-              <span className="text-lg font-bold text-primary">dooper</span>
+              <img src={dooperLogo} alt="Dooper" className="h-8 w-auto object-contain" />
               <span className="text-sm text-text-muted dark:text-slate-400">AI Health Assistant</span>
             </div>
             <p className="text-xs text-text-light dark:text-slate-500 text-center">

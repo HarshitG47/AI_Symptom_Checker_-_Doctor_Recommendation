@@ -40,6 +40,7 @@ const updateUserProfile = async (req, res, next) => {
         _id: updatedUser.id,
         fullName: updatedUser.fullName,
         email: updatedUser.email,
+        createdAt: updatedUser.createdAt,
       });
     } else {
       res.status(404);

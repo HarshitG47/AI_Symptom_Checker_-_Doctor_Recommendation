@@ -4,30 +4,30 @@ const aiService = require('../services/aiService');
 // Create new symptom assessment
 const createAssessment = async (req, res, next) => {
   try {
-    const { symptoms, age, gender, duration, existingConditions } = req.body;
+    const { 
+      age, gender, weight, height, 
+      existingConditions, currentMedications, allergies, pregnancyStatus, 
+      painLevel, duration, primarySymptoms, secondarySymptoms, symptoms 
+    } = req.body;
 
-    if (!symptoms || !age || !gender || !duration) {
+    if (!age || !gender || !duration || !primarySymptoms || primarySymptoms.length === 0) {
       res.status(400);
-      throw new Error('Please fill in symptoms, age, gender, and duration');
+      throw new Error('Please fill in all required fields (age, gender, duration, primary symptoms)');
     }
 
+    const patientData = {
+      age, gender, weight, height,
+      existingConditions, currentMedications, allergies, pregnancyStatus,
+      painLevel, duration, primarySymptoms, secondarySymptoms, symptoms
+    };
+
     // Call AI Service
-    const aiAnalysis = await aiService.getSymptomCheck(
-      symptoms,
-      age,
-      gender,
-      duration,
-      existingConditions
-    );
+    const aiAnalysis = await aiService.getSymptomCheck(patientData);
 
     // Save to Database
     const assessment = await Assessment.create({
       user: req.user._id,
-      symptoms,
-      age,
-      gender,
-      duration,
-      existingConditions: existingConditions || '',
+      ...patientData,
       aiAnalysis,
       chatHistory: []
     });
@@ -48,7 +48,8 @@ const getAssessments = async (req, res, next) => {
       const searchRegex = new RegExp(req.query.search, 'i');
       query.$or = [
         { symptoms: searchRegex },
-        { 'aiAnalysis.possibleCondition': searchRegex },
+        { primarySymptoms: searchRegex },
+        { 'aiAnalysis.possibleConditions.condition': searchRegex },
         { 'aiAnalysis.recommendedSpecialty': searchRegex }
       ];
     }

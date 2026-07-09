@@ -1,65 +1,108 @@
-# Dooper AI Symptom Checker & Specialty Finder
+# Dooper AI Symptom Checker & Specialty Finder - Phase 2 (Clinical Intelligence Engine)
 
-An AI-powered Symptom Checker web application that allows users to securely register and log in, describe their symptoms, receive a structured possible condition assessment, determine symptom severity level, find the recommended medical specialty, and ask follow-up questions to an AI clinical assistant.
+An advanced AI-powered Clinical Intelligence Engine that acts as a clinical decision-support system. Instead of relying solely on LLM responses, this system collects structured patient data and combines AI reasoning with a verified medical knowledge base (MedlinePlus API) to provide highly accurate, evidence-based health assessments, confidence scores, and emergency red-flag detection.
 
 This application replicates the modern, premium visual design language of the **Dooper** healthcare portal, using a custom Montserrat font, curated colors (Dooper Crimson Red `#E40443`), glassmorphic shadows, transitions, and support for a native Dark Mode.
 
 ---
 
-## 🚀 Tech Stack
+## 🏗️ Architecture Diagram
+
+```mermaid
+graph TD
+    UI[Frontend: React/Vite UI] --> |Structured Patient Data| API[Backend: Express/Node.js API]
+    API --> |Authenticate| DB[(MongoDB: Users & Assessments)]
+    API --> |Primary Symptoms| KB[MedlinePlus Health Topics API]
+    KB --> |Returns Evidence-based Context| API
+    API --> |Context + Prompt| LLM[OpenRouter AI Models]
+    LLM --> |Returns Top 3 Conditions & Red Flags| API
+    API --> |Stores Assessment| DB
+    API --> |Returns Results| UI
+```
+
+---
+
+## 🗄️ Database Design (MongoDB Schema)
+
+**Assessment Schema (`server/models/Assessment.js`)**:
+- `user`: ObjectId (Ref to User)
+- `age`: Number
+- `gender`: String
+- `weight`: Number
+- `height`: Number
+- `existingConditions`: String
+- `currentMedications`: String
+- `allergies`: String
+- `pregnancyStatus`: String
+- `painLevel`: Number (1-10)
+- `duration`: String
+- `primarySymptoms`: Array of Strings (e.g. ["Fever", "Headache"])
+- `secondarySymptoms`: Array of Strings
+- `symptoms`: String (Additional notes)
+- `aiAnalysis`: 
+  - `possibleConditions`: Array of Objects (`condition`, `confidenceScore`, `supportingSymptoms`)
+  - `redFlagDetected`: Boolean
+  - `severityLevel`: String (Mild, Moderate, Severe)
+  - `recommendedSpecialty`: String
+  - `healthAdvice`: String
+  - `sources`: Array of Strings
+- `chatHistory`: Array of Objects (`role`, `content`, `timestamp`)
+
+---
+
+## 🧠 AI Workflow & Knowledge Base
+
+### 1. Structured Data Collection
+Instead of a simple text box, the frontend collects structured clinical parameters (vitals, medical history, pain scale, primary/secondary symptoms).
+
+### 2. Knowledge Base Retrieval (MedlinePlus)
+Before generating an assessment, the backend queries the **MedlinePlus Health Topics API** (National Library of Medicine) using the patient's primary symptoms to retrieve verified medical summaries.
+
+### 3. AI Clinical Analysis
+The structured patient data and the retrieved MedlinePlus context are injected into a highly engineered system prompt. The AI (via OpenRouter, falling back between multiple models) is instructed to act as a clinical decision-support engine and return:
+- **Top 3 Possible Conditions** with assigned **Confidence Scores (%)**.
+- **Red Flag Detection** for immediate medical emergencies.
+- **Evidence-backed Sources**.
+
+### 4. Conversation Memory
+Users can ask follow-up questions within the assessment context. The AI remembers the patient's profile and the initial assessment results, maintaining continuous consultation memory.
+
+---
+
+## 🚀 Tech Stack & APIs Used
 
 ### Frontend (Client)
 - **Framework**: React.js (built with Vite)
 - **Styling**: Tailwind CSS
-- **Routing**: React Router DOM (v6)
-- **Icons**: Lucide React
-- **API Client**: Axios (configured with automated JWT authorization interceptors)
 - **PDF Generation**: jsPDF (for generating medical report cards)
 
 ### Backend (Server)
-- **Runtime**: Node.js
-- **Framework**: Express.js
+- **Runtime**: Node.js & Express.js
 - **Database**: MongoDB (via Mongoose)
-- **Auth**: JSON Web Tokens (JWT) & bcryptjs (password hashing)
-- **AI Integration**: OpenRouter API (Smart failover between `google/gemini-2.5-flash` and `meta-llama/llama-3.3-70b-instruct`)
-- **Emergency / Failover Safety**: Local Clinical Fallback Engine (runs local symptom regex parsing if API limits or credentials fail)
+- **Auth**: JSON Web Tokens (JWT)
+
+### External APIs
+- **OpenRouter API**: Access to leading open-source models (`gemma-4-31b`, `llama-3.3-70b`, etc.).
+- **MedlinePlus Web Service API**: Publicly available, highly trusted health topics knowledge base used for context retrieval.
 
 ---
 
 ## 🛠️ Features
 
-1. **Fully Functional Authentication Module**
-   - Register: Full Name, Email, Password, Confirm Password, form validation, and real-time password strength checker.
-   - Login: JWT authentication, secure protected routes on the frontend, and profile updates.
-2. **Interactive Dashboard**
-   - Welcome Card greeting the user by name with customized time-of-day warnings.
-   - Simple, step-by-step description instructions.
-   - Comprehensive history log of past checks.
-3. **AI Symptom Checker**
-   - Inputs: Symptoms Description, Age, Gender, Symptom Duration, and Optional Existing Conditions.
-   - Response Language support: Select output language (English, Hindi, Spanish, French, German, Arabic) and have the AI translate the diagnostic summaries and self-care advice seamlessly.
-4. **Clinical Health Assessments**
-   - Possible Condition names with detailed 2-3 line explanations.
-   - Color-coded Severity Badges: **Mild** (Green), **Moderate** (Yellow), and **Severe** (Red).
-   - Recommended Medical Specialties (General Physician, Cardiologist, Dermatologist, Neurologist, etc.).
-   - Actionable self-care suggestions and clear medical liability disclaimers.
-5. **Interactive AI Follow-up Chat**
-   - Chat box inside the assessment details page allows the user to ask follow-up questions contextually bound to their specific symptom check.
-6. **Assessment History with Search & Filter**
-   - Filter history by keyword search (matching symptoms or conditions).
-   - Filter by severity (Mild, Moderate, Severe).
-   - Filter by date range (Today, Last 7 days, Last 30 days).
-7. **Download Assessment as PDF**
-   - Generates and downloads a clinical-style branded PDF containing patient metadata, symptom report, condition explanation, specialty, and a medical disclaimer.
-8. **Dark Mode**
-   - System-synchronized or manual light/dark toggle.
+1. **Intelligent Symptom Collection**: Structured patient information including vitals and primary/secondary symptom categorisation.
+2. **Top 3 Conditions & Confidence Scores**: AI ranks the most likely diagnoses.
+3. **Emergency Red Flag Detection**: UI flashes a critical warning banner if severe symptoms (e.g. chest pain) are detected.
+4. **Medical Source References**: Outputs the verified sources used for the assessment.
+5. **Interactive AI Follow-up Chat**: Continuous contextual conversation.
+6. **Assessment History**: Stores history with keyword and severity filters.
+7. **Download Assessment as PDF**: Generates branded clinical reports.
+8. **Dark Mode**: System-synchronized or manual light/dark toggle.
 
 ---
 
 ## ⚙️ Environment Variables
 
 ### Backend (`server/.env`)
-Create a `.env` file inside the `server` directory:
 ```env
 PORT=5000
 MONGODB_URI=your_mongodb_atlas_connection_string
@@ -68,7 +111,6 @@ OPENROUTER_API_KEY=your_openrouter_api_key
 ```
 
 ### Frontend (`client/.env`)
-Create a `.env` file inside the `client` directory:
 ```env
 VITE_API_URL=http://localhost:5000/api
 ```
@@ -89,7 +131,6 @@ cd aisymptonchecker
 ```bash
 cd server
 npm install
-# Configure your .env file
 npm start
 ```
 The server will start running on [http://localhost:5000](http://localhost:5000).
@@ -99,7 +140,6 @@ Open a new terminal window:
 ```bash
 cd client
 npm install
-# Configure your .env file
 npm run dev
 ```
 The frontend application will be running on [http://localhost:5173](http://localhost:5173).
@@ -116,12 +156,8 @@ The frontend application will be running on [http://localhost:5173](http://local
    - **Root Directory**: `server`
    - **Build Command**: `npm install`
    - **Start Command**: `node server.js`
-5. Go to the **Environment** tab and add the environment variables:
-   - `MONGODB_URI`
-   - `JWT_SECRET`
-   - `OPENROUTER_API_KEY`
-   - `PORT` = `5000`
-6. Click **Deploy**. Copy the generated URL (e.g., `https://aisymptonchecker-backend.onrender.com`).
+5. Go to the **Environment** tab and add the environment variables (`MONGODB_URI`, `JWT_SECRET`, `OPENROUTER_API_KEY`).
+6. Click **Deploy**. Copy the generated URL.
 
 ### Deploying the Frontend (Vite/React) to Vercel
 1. Sign up on [Vercel](https://vercel.com/).
@@ -132,5 +168,5 @@ The frontend application will be running on [http://localhost:5173](http://local
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
 5. Expand the **Environment Variables** section and add:
-   - `VITE_API_URL` = `https://aisymptonchecker-backend.onrender.com/api` (use your actual Render backend URL)
+   - `VITE_API_URL` = `your_render_backend_url/api`
 6. Click **Deploy**.

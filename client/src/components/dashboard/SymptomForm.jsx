@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Brain, Send, AlertCircle, ChevronDown,
-  User, Clock, Activity, Pill
+  User, Clock, Activity, Pill, Heart, FileText, AlertTriangle
 } from 'lucide-react';
 import assessmentService from '../../services/assessmentService';
 
@@ -15,20 +15,51 @@ const DURATION_OPTIONS = [
   'More than 1 month',
 ];
 
+const PRIMARY_SYMPTOMS_LIST = [
+  'Fever', 'Headache', 'Chest Pain', 'Cough', 'Vomiting', 
+  'Dizziness', 'Shortness of Breath', 'Abdominal Pain', 
+  'Fatigue', 'Rash', 'Sore Throat', 'Muscle Pain'
+];
+
 const SymptomForm = ({ onAssessmentCreated }) => {
   const navigate = useNavigate();
   const [form, setForm] = useState({
-    symptoms: '',
     age: '',
     gender: '',
-    duration: '',
+    weight: '',
+    height: '',
     existingConditions: '',
+    currentMedications: '',
+    allergies: '',
+    pregnancyStatus: '',
+    painLevel: 5,
+    duration: '',
+    primarySymptoms: [],
+    secondarySymptoms: '', // Will just be a comma separated string for simplicity in UI, converted to array on submit or just sent as string if we allow it. Wait, the backend expects an array for secondary symptoms, let's keep it as a string input and split it.
+    symptoms: '',
   });
+  
+  const [secondaryText, setSecondaryText] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+    if (error) setError('');
+  };
+
+  const handlePrimarySymptomToggle = (symptom) => {
+    setForm(prev => {
+      const isSelected = prev.primarySymptoms.includes(symptom);
+      return {
+        ...prev,
+        primarySymptoms: isSelected 
+          ? prev.primarySymptoms.filter(s => s !== symptom)
+          : [...prev.primarySymptoms, symptom]
+      };
+    });
     if (error) setError('');
   };
 
@@ -36,17 +67,22 @@ const SymptomForm = ({ onAssessmentCreated }) => {
     e.preventDefault();
     setError('');
 
-    if (!form.symptoms.trim()) return setError('Please describe your symptoms');
     if (!form.age || isNaN(form.age) || form.age < 1 || form.age > 120) return setError('Please enter a valid age (1–120)');
     if (!form.gender) return setError('Please select your gender');
+    if (form.primarySymptoms.length === 0) return setError('Please select at least one primary symptom');
     if (!form.duration) return setError('Please select symptom duration');
 
     setLoading(true);
     try {
-      const assessment = await assessmentService.createAssessment({
+      const payload = {
         ...form,
         age: parseInt(form.age, 10),
-      });
+        weight: form.weight ? parseFloat(form.weight) : undefined,
+        height: form.height ? parseFloat(form.height) : undefined,
+        secondarySymptoms: secondaryText.split(',').map(s => s.trim()).filter(s => s),
+      };
+
+      const assessment = await assessmentService.createAssessment(payload);
       if (onAssessmentCreated) onAssessmentCreated(assessment);
       navigate(`/assessment/${assessment._id}`);
     } catch (err) {
@@ -56,10 +92,6 @@ const SymptomForm = ({ onAssessmentCreated }) => {
     }
   };
 
-  const inputIcon = (Icon) => (
-    <Icon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted dark:text-slate-400 pointer-events-none" />
-  );
-
   return (
     <div className="card">
       {/* Header */}
@@ -68,145 +100,180 @@ const SymptomForm = ({ onAssessmentCreated }) => {
           <Brain className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-text-primary dark:text-slate-100">AI Symptom Checker</h2>
-          <p className="text-xs text-text-muted dark:text-slate-400">Describe your symptoms and get an instant AI-powered health assessment</p>
+          <h2 className="text-lg font-bold text-text-primary dark:text-slate-100">Intelligent Clinical Assessment</h2>
+          <p className="text-xs text-text-muted dark:text-slate-400">Complete the clinical profile for an evidence-backed AI assessment</p>
         </div>
       </div>
 
       {error && (
         <div className="mb-5 flex items-start gap-2.5 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Symptoms */}
+      <form onSubmit={handleSubmit} className="space-y-8">
+        
+        {/* Section 1: Patient Profile */}
         <div>
-          <label className="label-text flex items-center gap-1.5">
-            <Activity className="w-3.5 h-3.5 text-primary" />
-            Symptoms <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            id="symptoms"
-            name="symptoms"
-            value={form.symptoms}
-            onChange={handleChange}
-            placeholder="Describe your symptoms in detail... (e.g., severe headache on the right side, nausea, sensitivity to light for the past 2 days)"
-            rows={4}
-            className="input-field resize-none leading-relaxed"
-          />
-          <p className="text-xs text-text-muted dark:text-slate-500 mt-1">Be as specific as possible for more accurate results</p>
-        </div>
-
-        {/* Age + Gender Row */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label-text flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-primary" />
-              Age <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              {inputIcon(User)}
-              <input
-                id="age"
-                type="number"
-                name="age"
-                value={form.age}
-                onChange={handleChange}
-                placeholder="e.g. 32"
-                min="1"
-                max="120"
-                className="input-field pl-10"
-              />
+          <h3 className="text-sm font-semibold text-primary mb-4 flex items-center gap-2 border-b border-border-light dark:border-slate-700 pb-2">
+            <User className="w-4 h-4" /> Patient Profile
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="label-text">Age <span className="text-red-500">*</span></label>
+              <input type="number" name="age" value={form.age} onChange={handleChange} min="1" max="120" className="input-field" placeholder="e.g. 32" />
             </div>
-          </div>
-          <div>
-            <label className="label-text">
-              Gender <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <select
-                id="gender"
-                name="gender"
-                value={form.gender}
-                onChange={handleChange}
-                className="input-field appearance-none pr-8 cursor-pointer"
-              >
+            <div>
+              <label className="label-text">Gender <span className="text-red-500">*</span></label>
+              <select name="gender" value={form.gender} onChange={handleChange} className="input-field">
                 <option value="">Select gender</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
                 <option value="Non-binary">Non-binary</option>
                 <option value="Prefer not to say">Prefer not to say</option>
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted dark:text-slate-400 pointer-events-none" />
+            </div>
+            <div>
+              <label className="label-text">Weight (kg)</label>
+              <input type="number" name="weight" value={form.weight} onChange={handleChange} step="0.1" className="input-field" placeholder="e.g. 70" />
+            </div>
+            <div>
+              <label className="label-text">Height (cm)</label>
+              <input type="number" name="height" value={form.height} onChange={handleChange} className="input-field" placeholder="e.g. 175" />
+            </div>
+            {(form.gender === 'Female' || form.gender === 'Non-binary' || form.gender === 'Prefer not to say') && (
+              <div className="md:col-span-2">
+                <label className="label-text">Pregnancy Status</label>
+                <select name="pregnancyStatus" value={form.pregnancyStatus} onChange={handleChange} className="input-field">
+                  <option value="">Select status...</option>
+                  <option value="Not Pregnant">Not Pregnant</option>
+                  <option value="Pregnant - 1st Trimester">Pregnant - 1st Trimester</option>
+                  <option value="Pregnant - 2nd Trimester">Pregnant - 2nd Trimester</option>
+                  <option value="Pregnant - 3rd Trimester">Pregnant - 3rd Trimester</option>
+                  <option value="Postpartum">Postpartum</option>
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Section 2: Medical History */}
+        <div>
+          <h3 className="text-sm font-semibold text-primary mb-4 flex items-center gap-2 border-b border-border-light dark:border-slate-700 pb-2">
+            <Heart className="w-4 h-4" /> Medical History
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label className="label-text flex items-center gap-1.5">Existing Medical Conditions</label>
+              <input type="text" name="existingConditions" value={form.existingConditions} onChange={handleChange} placeholder="e.g. Diabetes, Hypertension..." className="input-field" />
+            </div>
+            <div>
+              <label className="label-text flex items-center gap-1.5">Current Medications</label>
+              <input type="text" name="currentMedications" value={form.currentMedications} onChange={handleChange} placeholder="e.g. Metformin, Lisinopril..." className="input-field" />
+            </div>
+            <div>
+              <label className="label-text flex items-center gap-1.5">Allergies</label>
+              <input type="text" name="allergies" value={form.allergies} onChange={handleChange} placeholder="e.g. Penicillin, Peanuts..." className="input-field" />
             </div>
           </div>
         </div>
 
-        {/* Duration */}
+        {/* Section 3: Symptoms */}
         <div>
-          <label className="label-text flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-primary" />
-            Duration of Symptoms <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <select
-              id="duration"
-              name="duration"
-              value={form.duration}
-              onChange={handleChange}
-              className="input-field appearance-none pr-8 cursor-pointer"
-            >
-              <option value="">How long have you had these symptoms?</option>
-              {DURATION_OPTIONS.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted dark:text-slate-400 pointer-events-none" />
-          </div>
-        </div>
+          <h3 className="text-sm font-semibold text-primary mb-4 flex items-center gap-2 border-b border-border-light dark:border-slate-700 pb-2">
+            <Activity className="w-4 h-4" /> Clinical Symptoms
+          </h3>
+          <div className="space-y-5">
+            
+            <div>
+              <label className="label-text mb-2 block">Primary Symptoms <span className="text-red-500">*</span></label>
+              <div className="flex flex-wrap gap-2">
+                {PRIMARY_SYMPTOMS_LIST.map(sym => (
+                  <button
+                    key={sym}
+                    type="button"
+                    onClick={() => handlePrimarySymptomToggle(sym)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
+                      form.primarySymptoms.includes(sym)
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-white dark:bg-slate-800 text-text-secondary dark:text-slate-300 border-border dark:border-slate-600 hover:border-primary'
+                    }`}
+                  >
+                    {sym}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* Existing Conditions */}
-        <div>
-          <label className="label-text flex items-center gap-1.5">
-            <Pill className="w-3.5 h-3.5 text-primary" />
-            Existing Medical Conditions
-            <span className="ml-1 text-xs font-normal text-text-muted dark:text-slate-500">(optional)</span>
-          </label>
-          <input
-            id="existingConditions"
-            type="text"
-            name="existingConditions"
-            value={form.existingConditions}
-            onChange={handleChange}
-            placeholder="e.g. Diabetes, Hypertension, Asthma..."
-            className="input-field"
-          />
+            <div>
+              <label className="label-text">Secondary Symptoms (Comma separated)</label>
+              <input type="text" value={secondaryText} onChange={(e) => setSecondaryText(e.target.value)} placeholder="e.g. Chills, loss of appetite, runny nose" className="input-field" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label-text">Duration <span className="text-red-500">*</span></label>
+                <select name="duration" value={form.duration} onChange={handleChange} className="input-field">
+                  <option value="">Select duration</option>
+                  {DURATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label-text">Pain Level (1-10): {form.painLevel}</label>
+                <input 
+                  type="range" 
+                  name="painLevel" 
+                  min="1" 
+                  max="10" 
+                  value={form.painLevel} 
+                  onChange={handleChange} 
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 mt-3"
+                />
+                <div className="flex justify-between text-[10px] text-text-muted mt-1 px-1">
+                  <span>Mild (1)</span>
+                  <span>Severe (10)</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="label-text flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5" /> Additional Details
+              </label>
+              <textarea
+                name="symptoms"
+                value={form.symptoms}
+                onChange={handleChange}
+                placeholder="Describe any other details about how you are feeling..."
+                rows={3}
+                className="input-field resize-none"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Disclaimer */}
         <div className="p-3.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
           <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-            ⚕️ <strong>Medical Disclaimer:</strong> This AI assessment is for informational purposes only and does not constitute medical advice or diagnosis. Please consult a qualified healthcare professional.
+            ⚕️ <strong>Medical Disclaimer:</strong> This AI assessment uses medical knowledge bases but is for informational purposes only. It does not constitute a medical diagnosis.
           </p>
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          id="symptom-check-submit"
-          className="w-full btn-primary py-3.5 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
+          className="w-full btn-primary py-3.5 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {loading ? (
             <>
               <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              <span>Analyzing symptoms...</span>
+              <span>Analyzing Clinical Data...</span>
             </>
           ) : (
             <>
               <Send className="w-4 h-4" />
-              <span>Get AI Assessment</span>
+              <span>Generate AI Assessment</span>
             </>
           )}
         </button>

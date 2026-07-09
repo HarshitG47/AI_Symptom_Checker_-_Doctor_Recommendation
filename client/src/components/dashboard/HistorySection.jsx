@@ -197,7 +197,7 @@ const HistorySection = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <h3 className="text-sm font-semibold text-text-primary dark:text-slate-100 truncate group-hover:text-primary transition-colors">
-                    {assessment.aiAnalysis?.possibleCondition || 'Assessment'}
+                    {assessment.aiAnalysis?.possibleConditions?.[0]?.condition || 'Assessment'}
                   </h3>
                   <SeverityBadge level={assessment.aiAnalysis?.severityLevel} />
                 </div>
