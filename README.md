@@ -1,4 +1,4 @@
-# Dooper AI Symptom Checker & Specialty Finder - Phase 2 (Clinical Intelligence Engine)
+# Dooper AI Symptom Checker & Specialty Finder
 
 An advanced AI-powered Clinical Intelligence Engine that acts as a clinical decision-support system. Instead of relying solely on LLM responses, this system collects structured patient data and combines AI reasoning with a verified medical knowledge base (MedlinePlus API) to provide highly accurate, evidence-based health assessments, confidence scores, and emergency red-flag detection.
 
