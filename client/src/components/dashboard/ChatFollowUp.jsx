@@ -2,13 +2,20 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, Send, Bot, User, AlertCircle } from 'lucide-react';
 import assessmentService from '../../services/assessmentService';
 
+const FOLLOW_UP_LIMIT = 10;
+
 const ChatFollowUp = ({ assessmentId, initialHistory = [] }) => {
   const [messages, setMessages] = useState(initialHistory);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [limitReached, setLimitReached] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Count user messages to track remaining turns
+  const userMessageCount = messages.filter(m => m.role === 'user').length;
+  const remainingTurns = Math.max(0, FOLLOW_UP_LIMIT - userMessageCount);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -17,7 +24,7 @@ const ChatFollowUp = ({ assessmentId, initialHistory = [] }) => {
   const handleSend = async (e) => {
     e.preventDefault();
     const msg = input.trim();
-    if (!msg || loading) return;
+    if (!msg || loading || limitReached) return;
 
     setInput('');
     setError('');
@@ -28,7 +35,13 @@ const ChatFollowUp = ({ assessmentId, initialHistory = [] }) => {
       const result = await assessmentService.chatFollowUp(assessmentId, msg);
       setMessages(result.chatHistory);
     } catch (err) {
-      setError('Failed to get a response. Please try again.');
+      // 429 = chat limit reached on the server
+      if (err.response?.status === 429) {
+        setLimitReached(true);
+        setError(err.response.data?.message || 'Follow-up chat limit reached.');
+      } else {
+        setError('Failed to get a response. Please try again.');
+      }
       setMessages(prev => prev.slice(0, -1));
     } finally {
       setLoading(false);
@@ -50,9 +63,19 @@ const ChatFollowUp = ({ assessmentId, initialHistory = [] }) => {
         <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
           <MessageSquare className="w-5 h-5 text-blue-500" />
         </div>
-        <div>
+        <div className="flex-1">
           <h3 className="text-base font-bold text-text-primary dark:text-slate-100">AI Follow-up Chat</h3>
           <p className="text-xs text-text-muted dark:text-slate-400">Ask follow-up questions about your assessment</p>
+        </div>
+        {/* Remaining turns badge */}
+        <div className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
+          limitReached
+            ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+            : remainingTurns <= 3
+            ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+            : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+        }`}>
+          {limitReached ? 'Limit reached' : `${remainingTurns} left`}
         </div>
       </div>
 
@@ -132,26 +155,34 @@ const ChatFollowUp = ({ assessmentId, initialHistory = [] }) => {
       </p>
 
       {/* Input */}
-      <form onSubmit={handleSend} className="flex gap-2 pt-3 border-t border-border-light dark:border-slate-700">
-        <input
-          ref={inputRef}
-          type="text"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="Ask a follow-up question..."
-          className="input-field text-sm py-2.5 flex-1"
-          id="chat-input"
-          disabled={loading}
-        />
-        <button
-          type="submit"
-          disabled={!input.trim() || loading}
-          id="chat-send"
-          className="w-10 h-10 rounded-lg bg-primary hover:bg-primary-hover text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0"
-        >
-          <Send className="w-4 h-4" />
-        </button>
-      </form>
+      {limitReached ? (
+        <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-center">
+          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+            Follow-up limit reached. Start a new assessment for more questions.
+          </p>
+        </div>
+      ) : (
+        <form onSubmit={handleSend} className="flex gap-2 pt-3 border-t border-border-light dark:border-slate-700">
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            placeholder="Ask a follow-up question..."
+            className="input-field text-sm py-2.5 flex-1"
+            id="chat-input"
+            disabled={loading}
+          />
+          <button
+            type="submit"
+            disabled={!input.trim() || loading}
+            id="chat-send"
+            className="w-10 h-10 rounded-lg bg-primary hover:bg-primary-hover text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </form>
+      )}
     </div>
   );
 };

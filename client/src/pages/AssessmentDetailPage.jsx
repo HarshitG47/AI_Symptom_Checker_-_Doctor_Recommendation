@@ -47,6 +47,10 @@ const AssessmentDetailPage = () => {
     const fetch = async () => {
       try {
         const data = await assessmentService.getAssessmentById(id);
+        if (data.status === 'consulting') {
+          navigate(`/consultation/${id}`);
+          return;
+        }
         setAssessment(data);
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to load assessment');
@@ -55,7 +59,7 @@ const AssessmentDetailPage = () => {
       }
     };
     fetch();
-  }, [id]);
+  }, [id, navigate]);
 
   const handleDownloadPDF = async () => {
     if (!assessment) return;
@@ -66,133 +70,249 @@ const AssessmentDetailPage = () => {
       const margin = 20;
       const pageWidth = 210;
       const contentWidth = pageWidth - margin * 2;
-      let y = 20;
+      let y = 25;
 
-      const addText = (text, x, yPos, size, style = 'normal', color = [30, 30, 30]) => {
+      // Helper for normal text
+      const addText = (text, x, yPos, size, style = 'normal', color = [30, 41, 59]) => {
         pdf.setFontSize(size);
         pdf.setFont('helvetica', style);
         pdf.setTextColor(...color);
         pdf.text(text, x, yPos);
       };
 
-      const addWrappedText = (text, x, yPos, maxWidth, size = 10, style = 'normal', color = [80, 80, 80]) => {
+      // Helper for wrapped text block with dynamic pagination
+      const addWrappedText = (text, x, yPos, maxWidth, size = 9, style = 'normal', color = [71, 85, 105]) => {
         pdf.setFontSize(size);
         pdf.setFont('helvetica', style);
         pdf.setTextColor(...color);
         const lines = pdf.splitTextToSize(text, maxWidth);
-        pdf.text(lines, x, yPos);
-        return lines.length * (size * 0.4 + 1.5);
+        const lineHeight = size * 0.35 + 1.5;
+        let currentY = yPos;
+        for (let i = 0; i < lines.length; i++) {
+          if (currentY > 270) {
+            pdf.addPage();
+            currentY = 25;
+            // Draw continuous header
+            addText('dooper', margin, 15, 14, 'bold', [228, 4, 67]);
+            addText('AI Clinical Assessment Report (Continued)', margin + 18, 14, 9, 'normal', [148, 163, 184]);
+            pdf.setDrawColor(241, 245, 249);
+            pdf.line(margin, 17, pageWidth - margin, 17);
+            
+            pdf.setFontSize(size);
+            pdf.setFont('helvetica', style);
+            pdf.setTextColor(...color);
+          }
+          pdf.text(lines[i], x, currentY);
+          currentY += lineHeight;
+        }
+        return currentY - yPos;
       };
 
-      // Header Banner
-      pdf.setFillColor(228, 4, 67); // primary red
-      pdf.rect(0, 0, 210, 40, 'F');
-      addText('dooper', margin, 16, 24, 'bold', [255, 255, 255]);
-      addText('AI Clinical Intelligence', margin, 24, 10, 'normal', [255, 200, 200]);
-      addText('Symptom Assessment Report', pageWidth - margin, 16, 13, 'bold', [255, 255, 255]);
+      // Check page height and add page if needed
+      const checkSpace = (neededHeight) => {
+        if (y + neededHeight > 270) {
+          pdf.addPage();
+          y = 25;
+          // Draw standard page header
+          addText('dooper', margin, 15, 14, 'bold', [228, 4, 67]);
+          addText('AI Clinical Assessment Report', margin + 18, 14, 9, 'normal', [148, 163, 184]);
+          pdf.setDrawColor(241, 245, 249);
+          pdf.line(margin, 17, pageWidth - margin, 17);
+        }
+      };
+
+      // --- PAGE 1: Branded Header ---
+      addText('dooper', margin, y, 24, 'bold', [228, 4, 67]);
+      addText('CLINICAL INTELLIGENCE ENGINE', margin + 2, y + 6, 8, 'bold', [148, 163, 184]);
+      
+      const dateText = `Report ID: ${assessment._id.toString().slice(-8).toUpperCase()}  |  Date: ${new Date(assessment.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.setTextColor(255, 200, 200);
-      pdf.text(`Generated: ${new Date(assessment.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`, pageWidth - margin, 24, { align: 'right' });
-
-      y = 55;
-
-      // Patient Info Section
-      pdf.setFillColor(245, 246, 247);
-      pdf.roundedRect(margin, y - 6, contentWidth, 36, 3, 3, 'F');
-      addText('Patient Information', margin + 5, y, 11, 'bold', [30, 30, 30]);
-      y += 7;
-      const patientDetails = [
-        `Age: ${assessment.age} years  |  Gender: ${assessment.gender}  |  Weight: ${assessment.weight || 'N/A'} kg  |  Height: ${assessment.height || 'N/A'} cm`,
-        `Duration of Symptoms: ${assessment.duration}  |  Pain Level: ${assessment.painLevel || 'N/A'}/10`,
-        assessment.existingConditions ? `Existing Conditions: ${assessment.existingConditions}` : null,
-      ].filter(Boolean);
-      patientDetails.forEach(detail => {
-        addText(detail, margin + 5, y, 9, 'normal', [75, 70, 92]);
-        y += 6;
-      });
-      y += 10;
-
-      // Symptoms
-      addText('Reported Symptoms', margin, y, 12, 'bold', [30, 30, 30]);
-      y += 6;
-      let sympText = `Primary: ${assessment.primarySymptoms?.join(', ') || 'N/A'}\n`;
-      if (assessment.secondarySymptoms?.length) sympText += `Secondary: ${assessment.secondarySymptoms.join(', ')}\n`;
-      if (assessment.symptoms) sympText += `Notes: ${assessment.symptoms}`;
-      const symptomsHeight = addWrappedText(sympText, margin, y, contentWidth, 10, 'normal', [75, 70, 92]);
-      y += symptomsHeight + 10;
-
-      // Divider
-      pdf.setDrawColor(227, 230, 232);
+      pdf.setTextColor(148, 163, 184);
+      pdf.text(dateText, pageWidth - margin, y + 2, { align: 'right' });
+      
+      y += 12;
+      pdf.setDrawColor(226, 232, 240);
       pdf.line(margin, y, pageWidth - margin, y);
       y += 10;
 
-      // Assessment Result
-      addText('AI Clinical Analysis', margin, y, 13, 'bold', [30, 30, 30]);
+      // --- Patient Clinical Profile ---
+      addText('Patient Clinical Profile', margin, y, 12, 'bold', [30, 41, 59]);
+      y += 5;
+
+      pdf.setFillColor(248, 250, 252);
+      pdf.roundedRect(margin, y, contentWidth, 38, 2, 2, 'F');
+      
+      const pCol1 = margin + 5;
+      const pCol2 = margin + contentWidth / 2 + 5;
+      let py = y + 7;
+
+      addText(`Age: ${assessment.age} yrs`, pCol1, py, 9.5, 'normal', [71, 85, 105]);
+      addText(`Gender: ${assessment.gender}`, pCol2, py, 9.5, 'normal', [71, 85, 105]);
+      py += 7;
+      addText(`Weight: ${assessment.weight ? `${assessment.weight} kg` : 'N/A'}`, pCol1, py, 9.5, 'normal', [71, 85, 105]);
+      addText(`Height: ${assessment.height ? `${assessment.height} cm` : 'N/A'}`, pCol2, py, 9.5, 'normal', [71, 85, 105]);
+      py += 7;
+      addText(`Pregnancy Status: ${assessment.pregnancyStatus || 'N/A'}`, pCol1, py, 9.5, 'normal', [71, 85, 105]);
+      addText(`Symptom Duration: ${assessment.duration}`, pCol2, py, 9.5, 'normal', [71, 85, 105]);
+      py += 7;
+      addText(`Pain Scale: ${assessment.painLevel || 'N/A'}/10`, pCol1, py, 9.5, 'normal', [71, 85, 105]);
+      addText(`Existing Conditions: ${assessment.existingConditions || 'None'}`, pCol2, py, 9.5, 'normal', [71, 85, 105]);
+      
+      y += 45;
+
+      // --- Medical History Details ---
+      if (assessment.currentMedications || assessment.allergies) {
+        addText('Clinical History / Vitals', margin, y, 11, 'bold', [30, 41, 59]);
+        y += 5;
+        let histText = '';
+        if (assessment.currentMedications) histText += `Current Medications: ${assessment.currentMedications}\n`;
+        if (assessment.allergies) histText += `Allergies / Drug Reactions: ${assessment.allergies}\n`;
+        const histHeight = addWrappedText(histText.trim(), margin, y, contentWidth, 9, 'normal', [71, 85, 105]);
+        y += histHeight + 8;
+      }
+
+      // --- Reported Symptoms ---
+      addText('Reported Symptoms', margin, y, 11, 'bold', [30, 41, 59]);
+      y += 5;
+      
+      let sympText = `Primary Symptoms: ${assessment.primarySymptoms?.join(', ') || 'N/A'}\n`;
+      if (assessment.secondarySymptoms?.length) {
+        sympText += `Secondary Symptoms: ${assessment.secondarySymptoms.join(', ')}\n`;
+      }
+      if (assessment.symptoms) {
+        sympText += `Clinical Notes: "${assessment.symptoms}"`;
+      }
+
+      const symptomsHeight = addWrappedText(sympText.trim(), margin, y, contentWidth, 9, 'normal', [71, 85, 105]);
+      y += symptomsHeight + 10;
+
+      // --- Divider ---
+      pdf.setDrawColor(241, 245, 249);
+      pdf.line(margin, y, pageWidth - margin, y);
       y += 8;
 
+      // --- Red Flag Banner ---
       if (assessment.aiAnalysis?.redFlagDetected) {
+        checkSpace(18);
         pdf.setFillColor(254, 226, 226);
-        pdf.roundedRect(margin, y, contentWidth, 15, 3, 3, 'F');
-        addText('🚨 IMMEDIATE MEDICAL ATTENTION RECOMMENDED', margin + 5, y + 10, 10, 'bold', [220, 38, 38]);
+        pdf.roundedRect(margin, y, contentWidth, 14, 1.5, 1.5, 'F');
+        pdf.setDrawColor(252, 165, 165);
+        pdf.roundedRect(margin, y, contentWidth, 14, 1.5, 1.5, 'S');
+        addText('🚨 IMMEDIATE MEDICAL ATTENTION RECOMMENDED (RED FLAG)', margin + 5, y + 9, 9, 'bold', [220, 38, 38]);
         y += 20;
       }
 
-      // Conditions
+      // --- Diagnostic Analysis ---
+      addText('Evidence-Based AI Clinical Triage Analysis', margin, y, 12, 'bold', [30, 41, 59]);
+      y += 7;
+
       const conditions = assessment.aiAnalysis?.possibleConditions || [];
       conditions.forEach((c, idx) => {
-        if (y > 260) { pdf.addPage(); y = 20; }
-        pdf.setFillColor(252, 230, 236);
-        pdf.roundedRect(margin, y, contentWidth, 22, 3, 3, 'F');
-        addText(`Condition ${idx + 1}: ${c.condition}`, margin + 5, y + 8, 11, 'bold', [228, 4, 67]);
-        addText(`Confidence: ${c.confidenceScore}%`, pageWidth - margin - 5, y + 8, 10, 'bold', [228, 4, 67], {align: 'right'});
-        addText(`Supporting: ${c.supportingSymptoms}`, margin + 5, y + 16, 9, 'normal', [75, 70, 92]);
-        y += 26;
+        let textNeeded = '';
+        if (c.matchingSymptoms && c.matchingSymptoms.length > 0) {
+          textNeeded += `Matching: ${c.matchingSymptoms.join(', ')}\n`;
+        }
+        if (c.missingSymptoms && c.missingSymptoms.length > 0) {
+          textNeeded += `Absent: ${c.missingSymptoms.join(', ')}\n`;
+        }
+        textNeeded += `Reasoning: ${c.reasoning}`;
+
+        const lines = pdf.splitTextToSize(textNeeded, contentWidth - 8);
+        const textHeight = lines.length * (8.5 * 0.35 + 1.5);
+        const cardHeight = 13 + textHeight + 4;
+
+        checkSpace(cardHeight + 4);
+        
+        // Card Background
+        pdf.setFillColor(253, 242, 244); // very light pink/rose
+        pdf.roundedRect(margin, y, contentWidth, cardHeight, 1.5, 1.5, 'F');
+        
+        // Progress Bar for Confidence Score
+        const barWidth = 30;
+        const fillWidth = (c.confidenceScore / 100) * barWidth;
+        
+        addText(`${idx + 1}. ${c.condition}`, margin + 4, y + 7, 10.5, 'bold', [228, 4, 67]);
+        
+        // Draw progress bar outline
+        pdf.setFillColor(226, 232, 240);
+        pdf.roundedRect(pageWidth - margin - 4 - barWidth, y + 4.5, barWidth, 3.5, 1, 1, 'F');
+        // Draw fill
+        pdf.setFillColor(228, 4, 67);
+        pdf.roundedRect(pageWidth - margin - 4 - barWidth, y + 4.5, fillWidth, 3.5, 1, 1, 'F');
+        // Draw text
+        addText(`${c.confidenceScore}% Match`, pageWidth - margin - 4.5 - barWidth - 14, y + 7.5, 8.5, 'bold', [228, 4, 67]);
+        
+        // Supporting details (matching/missing/reasoning)
+        let detailsText = '';
+        if (c.matchingSymptoms && c.matchingSymptoms.length > 0) {
+          detailsText += `Matching: ${c.matchingSymptoms.join(', ')}\n`;
+        }
+        if (c.missingSymptoms && c.missingSymptoms.length > 0) {
+          detailsText += `Absent Symptoms: ${c.missingSymptoms.join(', ')}\n`;
+        }
+        detailsText += `Clinical Reasoning: ${c.reasoning}`;
+
+        addWrappedText(detailsText, margin + 4, y + 13, contentWidth - 8, 8.5, 'normal', [100, 116, 139]);
+        y += cardHeight + 5;
       });
 
-      y += 5;
-      
-      // Severity + Specialty
-      const halfW = (contentWidth - 5) / 2;
+      y += 2;
+
+      // --- Severity & Specialty Summary ---
+      const halfW = (contentWidth - 6) / 2;
+      let specialtyExplanationHeight = 0;
+      if (assessment.aiAnalysis.recommendedSpecialtyExplanation) {
+        const specLines = pdf.splitTextToSize(assessment.aiAnalysis.recommendedSpecialtyExplanation, halfW - 10);
+        specialtyExplanationHeight = specLines.length * (8.5 * 0.35 + 1.5) + 4;
+      }
+      const boxHeight = Math.max(18 + specialtyExplanationHeight, 20);
+
+      checkSpace(boxHeight + 5);
       const sevColor = assessment.aiAnalysis.severityLevel === 'Severe' ? [220, 38, 38] : assessment.aiAnalysis.severityLevel === 'Moderate' ? [202, 138, 4] : [22, 163, 74];
-      pdf.setFillColor(245, 246, 247);
-      pdf.roundedRect(margin, y, halfW, 22, 3, 3, 'F');
-      addText('Severity Level', margin + 5, y + 8, 9, 'bold', [141, 152, 164]);
-      addText(assessment.aiAnalysis.severityLevel, margin + 5, y + 16, 12, 'bold', sevColor);
+      
+      pdf.setFillColor(248, 250, 252);
+      pdf.roundedRect(margin, y, halfW, boxHeight, 1.5, 1.5, 'F');
+      addText('SEVERITY LEVEL', margin + 5, y + 6, 8, 'bold', [148, 163, 184]);
+      addText(assessment.aiAnalysis.severityLevel, margin + 5, y + 14, 11, 'bold', sevColor);
 
-      pdf.roundedRect(margin + halfW + 5, y, halfW, 22, 3, 3, 'F');
-      addText('Recommended Specialty', margin + halfW + 10, y + 8, 9, 'bold', [141, 152, 164]);
-      const specLines = pdf.splitTextToSize(assessment.aiAnalysis.recommendedSpecialty, halfW - 10);
-      pdf.setFontSize(11); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
-      pdf.text(specLines[0], margin + halfW + 10, y + 16);
-      y += 30;
+      pdf.roundedRect(margin + halfW + 6, y, halfW, boxHeight, 1.5, 1.5, 'F');
+      addText('RECOMMENDED MEDICAL SPECIALTY', margin + halfW + 11, y + 6, 8, 'bold', [148, 163, 184]);
+      addText(assessment.aiAnalysis.recommendedSpecialty, margin + halfW + 11, y + 14, 10.5, 'bold', [30, 41, 59]);
+      if (assessment.aiAnalysis.recommendedSpecialtyExplanation) {
+        addWrappedText(assessment.aiAnalysis.recommendedSpecialtyExplanation, margin + halfW + 11, y + 20, halfW - 15, 8, 'normal', [71, 85, 105]);
+      }
 
-      // Health Advice
-      addText('Self-Care Advice', margin, y, 11, 'bold', [30, 30, 30]);
-      y += 6;
-      const adviceHeight = addWrappedText(assessment.aiAnalysis.healthAdvice, margin, y, contentWidth, 10);
-      y += adviceHeight + 10;
+      y += boxHeight + 7;
 
-      // Sources
-      addText('Medical Sources Consulted', margin, y, 10, 'bold', [141, 152, 164]);
-      y += 6;
-      const srcText = assessment.aiAnalysis?.sources?.join(', ') || 'General Knowledge';
-      const srcHeight = addWrappedText(srcText, margin, y, contentWidth, 9, 'normal', [141, 152, 164]);
+      // --- Home Care Advice ---
+      checkSpace(28);
+      addText('Clinical Recommendations & Advice', margin, y, 11, 'bold', [30, 41, 59]);
+      y += 5;
+      const adviceHeight = addWrappedText(assessment.aiAnalysis.healthAdvice, margin, y, contentWidth, 9, 'normal', [71, 85, 105]);
+      y += adviceHeight + 8;
+
+      // --- Sources ---
+      checkSpace(18);
+      addText('References & Sources Consulted', margin, y, 9, 'bold', [148, 163, 184]);
+      y += 4.5;
+      const srcText = assessment.aiAnalysis?.sources?.join(', ') || 'MedlinePlus Open Medical Database';
+      const srcHeight = addWrappedText(srcText, margin, y, contentWidth, 8, 'normal', [148, 163, 184]);
       y += srcHeight + 10;
 
-      // Disclaimer box
-      if (y > 250) { pdf.addPage(); y = 20; }
-      pdf.setFillColor(255, 251, 235);
-      pdf.roundedRect(margin, y, contentWidth, 25, 3, 3, 'F');
-      pdf.setDrawColor(252, 211, 77);
-      pdf.roundedRect(margin, y, contentWidth, 25, 3, 3, 'S');
-      addText('⚕️  Medical Disclaimer', margin + 5, y + 8, 10, 'bold', [120, 90, 0]);
+      // --- Disclaimer Box ---
+      checkSpace(24);
+      pdf.setFillColor(254, 252, 232); // light warning yellow
+      pdf.roundedRect(margin, y, contentWidth, 20, 1.5, 1.5, 'F');
+      pdf.setDrawColor(254, 240, 138);
+      pdf.roundedRect(margin, y, contentWidth, 20, 1.5, 1.5, 'S');
+      addText('⚕️  Clinical Disclaimer', margin + 4, y + 6, 8.5, 'bold', [133, 77, 14]);
       addWrappedText(
-        'This assessment is AI-generated and is NOT a medical diagnosis. Please consult a qualified doctor for professional medical advice.',
-        margin + 5, y + 16, contentWidth - 10, 9, 'normal', [120, 90, 0]
+        'This assessment is generated by an Artificial Intelligence engine using MedlinePlus knowledge contexts and is NOT a medical diagnosis. Please consult a licensed doctor or medical provider for clinical evaluation, diagnosis, and treatment.',
+        margin + 4, y + 12, contentWidth - 8, 7.5, 'normal', [133, 77, 14]
       );
-      
-      pdf.save(`dooper-assessment-${new Date().toISOString().slice(0,10)}.pdf`);
+
+      pdf.save(`dooper-clinical-report-${new Date().toISOString().slice(0,10)}.pdf`);
     } catch (err) {
       console.error('PDF generation failed:', err);
     } finally {
@@ -332,7 +452,7 @@ const AssessmentDetailPage = () => {
           <div className="card">
              <div className="flex items-center justify-between mb-4">
                  <h2 className="text-sm font-bold text-text-secondary dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                   <Activity className="w-4 h-4"/> Top 3 Possible Conditions
+                   <Activity className="w-4 h-4"/> Top 5 Differential Diagnoses
                  </h2>
                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold ${sevCfg.color} ${sevCfg.bg} ${sevCfg.border}`}>
                     <SevIcon className="w-3.5 h-3.5" />
@@ -340,11 +460,11 @@ const AssessmentDetailPage = () => {
                  </div>
              </div>
 
-             <div className="space-y-3">
+             <div className="space-y-4">
                {conditions.map((cond, idx) => (
-                 <div key={idx} className="p-4 rounded-xl border border-border-light dark:border-slate-700 bg-surface-hover dark:bg-slate-800/50">
-                    <div className="flex items-center justify-between mb-2">
-                       <h3 className="text-base font-bold text-text-primary dark:text-slate-100">{cond.condition}</h3>
+                 <div key={idx} className="p-5 rounded-2xl border border-border-light dark:border-slate-800 bg-surface-hover dark:bg-slate-900/40">
+                    <div className="flex items-center justify-between mb-3">
+                       <h3 className="text-base font-bold text-text-primary dark:text-slate-100">{idx + 1}. {cond.condition}</h3>
                        <div className="flex items-center gap-2">
                           <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                              <div className="h-full bg-primary" style={{width: `${cond.confidenceScore}%`}}></div>
@@ -352,10 +472,39 @@ const AssessmentDetailPage = () => {
                           <span className="text-xs font-bold text-primary">{cond.confidenceScore}%</span>
                        </div>
                     </div>
-                    <p className="text-sm text-text-secondary dark:text-slate-400">
-                      <span className="font-semibold mr-1">Supporting Symptoms:</span>
-                      {cond.supportingSymptoms}
-                    </p>
+
+                    <div className="space-y-3.5">
+                      {cond.matchingSymptoms && cond.matchingSymptoms.length > 0 && (
+                        <div>
+                          <p className="text-[11px] font-semibold text-text-muted dark:text-slate-400 uppercase tracking-wider mb-1">Matching Symptoms</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {cond.matchingSymptoms.map((sym, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium rounded-md border border-emerald-200 dark:border-emerald-900/50">
+                                {sym}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {cond.missingSymptoms && cond.missingSymptoms.length > 0 && (
+                        <div>
+                          <p className="text-[11px] font-semibold text-text-muted dark:text-slate-400 uppercase tracking-wider mb-1">Absence of Symptoms</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {cond.missingSymptoms.map((sym, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-slate-50 dark:bg-slate-850 text-text-muted dark:text-slate-400 text-xs font-medium rounded-md border border-border dark:border-slate-700">
+                                {sym}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t border-border-light/50 dark:border-slate-800">
+                        <p className="text-xs font-semibold text-text-secondary dark:text-slate-300 mb-0.5">Clinical Reasoning</p>
+                        <p className="text-sm text-text-secondary dark:text-slate-400 leading-relaxed">{cond.reasoning}</p>
+                      </div>
+                    </div>
                  </div>
                ))}
              </div>
@@ -363,7 +512,7 @@ const AssessmentDetailPage = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {/* Recommended Specialty */}
-            <div className="card h-full">
+            <div className="card h-full flex flex-col justify-between">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-xl bg-primary-light dark:bg-primary/20 flex items-center justify-center">
                   <Stethoscope className="w-5 h-5 text-primary" />
@@ -373,6 +522,11 @@ const AssessmentDetailPage = () => {
                   <p className="text-lg font-bold text-text-primary dark:text-slate-100">{assessment.aiAnalysis?.recommendedSpecialty}</p>
                 </div>
               </div>
+              {assessment.aiAnalysis?.recommendedSpecialtyExplanation && (
+                <p className="text-xs text-text-secondary dark:text-slate-400 leading-relaxed border-t border-border-light dark:border-slate-800 pt-3 mt-2">
+                  {assessment.aiAnalysis.recommendedSpecialtyExplanation}
+                </p>
+              )}
             </div>
 
             {/* Health Advice */}
@@ -406,6 +560,28 @@ const AssessmentDetailPage = () => {
                    </span>
                  ))}
                </div>
+            </div>
+          )}
+
+          {/* RAG Knowledge Base Queries — Explainability Section */}
+          {assessment.ragKeywords && assessment.ragKeywords.length > 0 && (
+            <div className="card bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/30">
+              <div className="flex items-center gap-2 mb-3">
+                <FileSearch className="w-4 h-4 text-blue-500" />
+                <h3 className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                  AI Knowledge Base Queries (Dynamic RAG)
+                </h3>
+              </div>
+              <p className="text-[11px] text-text-muted dark:text-slate-400 mb-3 leading-relaxed">
+                The triage assistant extracted these clinical keywords from your symptoms, Q&A responses, and uploaded reports, then queried MedlinePlus for each to retrieve trusted, evidence-based medical literature used in this assessment.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {assessment.ragKeywords.map((kw, i) => (
+                  <span key={i} className="text-xs px-2.5 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium rounded-full border border-blue-200 dark:border-blue-800/50">
+                    🔍 {kw}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 

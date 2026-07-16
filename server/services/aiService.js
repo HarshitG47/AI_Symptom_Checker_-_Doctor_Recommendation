@@ -50,11 +50,11 @@ const searchMedlinePlus = async (query) => {
   }
 };
 
-const getSymptomPrompt = (patientData, medicalContext) => `
-You are an expert AI Medical Assistant. Analyze the patient's structured data and the provided medical knowledge base context to generate a clinical assessment.
-Do NOT use Markdown formatting in your response. Return ONLY the RAW JSON object.
+const getConsultationPrompt = (patientData, medicalContext, chatHistory, uploadedText, forceComplete = false) => `
+You are dooper, an expert AI Clinical Triage & Consultation Assistant.
+Conduct an interactive, conversational medical triage with the patient. 
 
-Patient Details:
+Initial Patient Profile:
 - Age: ${patientData.age}
 - Gender: ${patientData.gender}
 - Weight: ${patientData.weight || 'N/A'} kg
@@ -67,25 +67,50 @@ Patient Details:
 - Duration: ${patientData.duration}
 - Primary Symptoms: ${patientData.primarySymptoms?.join(', ') || 'None'}
 - Secondary Symptoms: ${patientData.secondarySymptoms?.join(', ') || 'None'}
-- Additional Description: ${patientData.symptoms || 'None'}
+- Initial Description: ${patientData.symptoms || 'None'}
 
-Medical Knowledge Base Context:
+${uploadedText ? `Uploaded Medical Report/Prescription Content:\n${uploadedText}\n` : ''}
+
+Trusted Medical Knowledge Base Context:
 ${medicalContext || 'No specific context retrieved.'}
 
-You must return a JSON object with EXACTLY this structure:
+Consultation Chat History:
+${chatHistory && chatHistory.length > 0 ? chatHistory.map(h => `${h.role === 'user' ? 'Patient' : 'Assistant (dooper)'}: ${h.content}`).join('\n') : 'No history yet. Start the consultation.'}
+
+${forceComplete ? `
+CRITICAL INSTRUCTION: You have asked enough questions. You MUST finalize this consultation now. 
+Set "status" to "completed" and compile the final clinical triage report with the top 5 possible conditions. 
+Do NOT ask any more follow-up questions.
+` : `
+INSTRUCTIONS:
+1. Review the patient profile, medical context, uploaded files, and chat history.
+2. Determine if you have enough information to generate a clinical triage report.
+   - Typically, complete a consultation after 3-4 turns of Patient responses.
+   - If the patient exhibits a life-threatening emergency (Red Flag: chest pain with sweating, stroke symptoms, difficulty breathing, severe allergic reaction, loss of consciousness, uncontrolled bleeding, high-risk pregnancy emergency), immediately stop the consultation and complete the assessment to trigger the emergency warning.
+3. You must respond in a strict JSON format. Do NOT use markdown.
+`}
+
+Return a JSON object with this exact structure:
 {
-  "possibleConditions": [
-    {
-      "condition": "string (name of the condition)",
-      "confidenceScore": number (percentage 0-100),
-      "supportingSymptoms": "string (why this condition matches the patient's symptoms)"
-    }
-  ], // Generate exactly 3 conditions
-  "redFlagDetected": boolean (true ONLY if symptoms indicate an immediate life-threatening emergency like severe chest pain, stroke symptoms, extreme breathlessness),
-  "severityLevel": "string (MUST be one of: 'Mild', 'Moderate', 'Severe')",
-  "recommendedSpecialty": "string (name of medical specialty, e.g. General Physician, Cardiologist, Emergency Medicine)",
-  "healthAdvice": "string (safe home care advice, NEVER recommend prescription medicines)",
-  "sources": ["string (e.g. 'MedlinePlus', 'WHO', etc. based on the Medical Context provided or general knowledge)"]
+  "status": "consulting" or "completed",
+  "message": "string (If status is 'consulting', ask the next single specific clinical question to help narrow down the diagnosis, keeping it empathetic, conversational, and clinical. If status is 'completed', write a final summary message introducing the report)",
+  "aiAnalysis": {
+    "possibleConditions": [
+      {
+        "condition": "string (name of condition)",
+        "confidenceScore": number (percentage 0-100),
+        "matchingSymptoms": ["string (patient symptoms matching this condition)"],
+        "missingSymptoms": ["string (expected symptoms of this condition that the patient does not have)"],
+        "reasoning": "string (clear clinical explanation of why this matches or does not match)"
+      }
+    ], // Generate exactly 5 conditions ONLY if status is 'completed'. If status is 'consulting', leave as empty array []
+    "redFlagDetected": boolean,
+    "severityLevel": "Mild" or "Moderate" or "Severe",
+    "recommendedSpecialty": "string",
+    "recommendedSpecialtyExplanation": "string (why this specialty is recommended based on symptoms and conditions)",
+    "healthAdvice": "string (safe home-care advice, NEVER prescribe specific medications)",
+    "sources": ["string (trusted medical references used, e.g. WHO, CDC, NHS, MedlinePlus)"]
+  }
 }
 `;
 
@@ -100,21 +125,21 @@ function normalizeAIResponse(rawText) {
 
   try {
     const parsed = JSON.parse(cleaned);
+    if (parsed.status) {
+      if (parsed.status === 'completed' && parsed.aiAnalysis) {
+        let sev = String(parsed.aiAnalysis.severityLevel || 'Mild');
+        if (sev.toLowerCase().includes('severe') || parsed.aiAnalysis.redFlagDetected) {
+          parsed.aiAnalysis.severityLevel = 'Severe';
+        } else if (sev.toLowerCase().includes('mod')) {
+          parsed.aiAnalysis.severityLevel = 'Moderate';
+        } else {
+          parsed.aiAnalysis.severityLevel = 'Mild';
+        }
 
-    if (parsed.possibleConditions && Array.isArray(parsed.possibleConditions)) {
-      let sev = String(parsed.severityLevel);
-      if (sev.toLowerCase().includes('severe') || parsed.redFlagDetected) {
-        parsed.severityLevel = 'Severe';
-      } else if (sev.toLowerCase().includes('mod')) {
-        parsed.severityLevel = 'Moderate';
-      } else {
-        parsed.severityLevel = 'Mild';
+        if (!parsed.aiAnalysis.sources || parsed.aiAnalysis.sources.length === 0) {
+          parsed.aiAnalysis.sources = ['General Medical Knowledge'];
+        }
       }
-      
-      if (!parsed.sources || parsed.sources.length === 0) {
-        parsed.sources = ['General Medical Knowledge'];
-      }
-      
       return parsed;
     }
   } catch (err) {
@@ -127,28 +152,53 @@ function normalizeAIResponse(rawText) {
 function runLocalClinicalFallback(patientData) {
   console.log('[LocalClinicalEngine] Running fallback rules...');
   return {
-    possibleConditions: [
-      {
-        condition: 'General Health Consultation',
-        confidenceScore: 70,
-        supportingSymptoms: 'Matches the provided clinical profile.'
-      },
-      {
-        condition: 'Observation Recommended',
-        confidenceScore: 50,
-        supportingSymptoms: 'A physical examination is advised.'
-      },
-      {
-        condition: 'Viral/Bacterial Infection',
-        confidenceScore: 30,
-        supportingSymptoms: 'Common baseline diagnosis for acute symptoms.'
-      }
-    ],
-    redFlagDetected: false,
-    severityLevel: 'Mild',
-    recommendedSpecialty: 'General Physician',
-    healthAdvice: 'Please rest, stay hydrated, and consult a doctor if symptoms worsen or persist.',
-    sources: ['Local Fallback Engine']
+    status: 'completed',
+    message: 'We have compiled your clinical triage report using our local medical analysis rules.',
+    aiAnalysis: {
+      possibleConditions: [
+        {
+          condition: 'General Health Consultation',
+          confidenceScore: 70,
+          matchingSymptoms: patientData.primarySymptoms || [],
+          missingSymptoms: ['High fever', 'Severe pain'],
+          reasoning: 'Matches the general baseline health profile.'
+        },
+        {
+          condition: 'Observation Recommended',
+          confidenceScore: 50,
+          matchingSymptoms: patientData.primarySymptoms || [],
+          missingSymptoms: [],
+          reasoning: 'General symptoms require medical provider observation.'
+        },
+        {
+          condition: 'Acute Viral Infection',
+          confidenceScore: 40,
+          matchingSymptoms: ['Fever'],
+          missingSymptoms: ['Rashes'],
+          reasoning: 'Common seasonal diagnostic probability.'
+        },
+        {
+          condition: 'Environmental Allergies',
+          confidenceScore: 30,
+          matchingSymptoms: patientData.secondarySymptoms || [],
+          missingSymptoms: ['Dyspnea'],
+          reasoning: 'May be triggered by pollen or dust exposure.'
+        },
+        {
+          condition: 'Mild Physical Strain',
+          confidenceScore: 20,
+          matchingSymptoms: ['Muscle Pain'],
+          missingSymptoms: ['Neurological signs'],
+          reasoning: 'Typical response to overexertion or muscle stress.'
+        }
+      ],
+      redFlagDetected: false,
+      severityLevel: 'Mild',
+      recommendedSpecialty: 'General Physician',
+      recommendedSpecialtyExplanation: 'A general physician can review your baseline symptoms and conduct basic checkups.',
+      healthAdvice: 'Please rest, stay hydrated, avoid strenuous activities, and consult a doctor if symptoms worsen.',
+      sources: ['Local Fallback Engine', 'MedlinePlus Guidelines']
+    }
   };
 }
 
@@ -204,13 +254,122 @@ const callOpenRouter = async (prompt) => {
   throw new Error('Could not retrieve a valid structured response from OpenRouter');
 };
 
-const getSymptomCheck = async (patientData) => {
-  // 1. Fetch Medical Knowledge Base Context
-  const query = patientData.primarySymptoms?.join(' ') || patientData.symptoms || 'general symptoms';
-  const medicalContext = await searchMedlinePlus(query);
+// Dynamic Clinical Keyword Extractor for enriched RAG queries
+const extractClinicalKeywords = async (patientData, chatHistory, uploadedText) => {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
 
-  // 2. Generate Prompt
-  const prompt = getSymptomPrompt(patientData, medicalContext);
+  // Build a condensed summary of all available clinical context
+  const chatSummary = chatHistory && chatHistory.length > 0
+    ? chatHistory
+        .filter(h => h.role === 'user')
+        .map(h => h.content)
+        .join(', ')
+    : '';
+
+  const uploadedSnippet = uploadedText
+    ? uploadedText.substring(0, 600)
+    : '';
+
+  const keywordPrompt = `You are a clinical triage keyword extraction assistant.
+
+Patient Profile:
+- Age: ${patientData.age}, Gender: ${patientData.gender}
+- Existing Conditions: ${patientData.existingConditions || 'None'}
+- Current Medications: ${patientData.currentMedications || 'None'}
+- Primary Symptoms: ${patientData.primarySymptoms?.join(', ') || 'None'}
+- Secondary Symptoms: ${patientData.secondarySymptoms?.join(', ') || 'None'}
+
+Patient Q&A Responses: ${chatSummary || 'Not yet available'}
+
+Uploaded Medical Report Excerpt: ${uploadedSnippet || 'None uploaded'}
+
+Your task: Extract 2 to 4 specific medical/clinical search keywords or short phrases from the above clinical context. These will be used to query the MedlinePlus medical database for evidence-based literature.
+
+Rules:
+- Focus on specific conditions, symptoms, drug names, or medical terms mentioned or implied.
+- Prefer specific clinical terms over generic ones (e.g., "Orthostatic Hypotension" over "dizziness").
+- Output ONLY a comma-separated list of keywords. No explanation, no formatting, no JSON.
+- Example output: Orthostatic Hypotension, Cardiac Arrhythmia, Palpitations`;
+
+  try {
+    const url = 'https://openrouter.ai/api/v1/chat/completions';
+    const headers = {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'http://localhost:5000',
+      'X-Title': 'Dooper RAG Keyword Extractor'
+    };
+
+    // Use the fastest/lightest model for this quick extraction call
+    const model = OPENROUTER_MODELS[OPENROUTER_MODELS.length - 1];
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: keywordPrompt }],
+        temperature: 0.1,
+        max_tokens: 80
+      })
+    });
+
+    if (response.status === 200) {
+      const data = await response.json();
+      const rawKeywords = data.choices?.[0]?.message?.content?.trim();
+      if (rawKeywords) {
+        const keywords = rawKeywords
+          .split(',')
+          .map(k => k.trim())
+          .filter(k => k.length > 2 && k.length < 60);
+        console.log(`[Dynamic RAG] Extracted keywords: ${keywords.join(', ')}`);
+        return keywords;
+      }
+    }
+  } catch (err) {
+    console.warn('[Dynamic RAG] Keyword extraction failed:', err.message);
+  }
+
+  return null;
+};
+
+const runConsultationStep = async (patientData, chatHistory, uploadedText, forceComplete = false) => {
+  // 1. Dynamic RAG: Use AI to extract enriched clinical keywords from evolving context
+  let medicalContext = '';
+  let usedKeywords = [];
+
+  if (process.env.OPENROUTER_API_KEY) {
+    const dynamicKeywords = await extractClinicalKeywords(patientData, chatHistory, uploadedText);
+
+    if (dynamicKeywords && dynamicKeywords.length > 0) {
+      usedKeywords = dynamicKeywords;
+
+      // Search MedlinePlus using each extracted keyword and accumulate the knowledge base
+      const contextParts = await Promise.allSettled(
+        dynamicKeywords.slice(0, 3).map(kw => searchMedlinePlus(kw))
+      );
+
+      medicalContext = contextParts
+        .filter(r => r.status === 'fulfilled' && r.value)
+        .map(r => r.value)
+        .join('\n---\n')
+        .substring(0, 3000); // Cap total context to avoid prompt token overflow
+    }
+  }
+
+  // 2. Fallback: Static primary symptom search if dynamic extraction failed
+  if (!medicalContext) {
+    const fallbackQuery = patientData.primarySymptoms?.join(' ') || patientData.symptoms || 'general symptoms';
+    console.log(`[RAG Fallback] Using static symptom query: ${fallbackQuery}`);
+    medicalContext = await searchMedlinePlus(fallbackQuery);
+    // Record fallback keywords for transparency
+    if (patientData.primarySymptoms?.length) {
+      usedKeywords = patientData.primarySymptoms;
+    }
+  }
+
+  // 3. Generate Prompt with enriched medical context
+  const prompt = getConsultationPrompt(patientData, medicalContext, chatHistory, uploadedText, forceComplete);
 
   if (process.env.OPENROUTER_API_KEY) {
     for (const model of OPENROUTER_MODELS) {
@@ -218,6 +377,8 @@ const getSymptomCheck = async (patientData) => {
         console.log(`[OpenRouter] Invoking model: ${model}...`);
         const result = await callOpenRouter(prompt);
         console.log(`[OpenRouter] Success with model: ${model}`);
+        // Attach keywords to result so controller can persist them
+        result.ragKeywords = usedKeywords;
         return result;
       } catch (err) {
         console.warn(`[OpenRouter] Model ${model} failed, trying next...`);
@@ -225,8 +386,10 @@ const getSymptomCheck = async (patientData) => {
     }
   }
 
-  // Fallback
-  return runLocalClinicalFallback(patientData);
+  // Fallback — attach fallback keywords too
+  const fallback = runLocalClinicalFallback(patientData);
+  fallback.ragKeywords = usedKeywords;
+  return fallback;
 };
 
 const getChatFollowUp = async (assessment, message, chatHistory) => {
@@ -298,6 +461,6 @@ Guidelines:
 };
 
 module.exports = {
-  getSymptomCheck,
+  runConsultationStep,
   getChatFollowUp
 };

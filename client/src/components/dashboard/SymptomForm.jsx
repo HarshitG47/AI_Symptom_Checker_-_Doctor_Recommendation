@@ -16,9 +16,18 @@ const DURATION_OPTIONS = [
 ];
 
 const PRIMARY_SYMPTOMS_LIST = [
-  'Fever', 'Headache', 'Chest Pain', 'Cough', 'Vomiting', 
-  'Dizziness', 'Shortness of Breath', 'Abdominal Pain', 
-  'Fatigue', 'Rash', 'Sore Throat', 'Muscle Pain'
+  // General & Systemic
+  'Fever', 'Headache', 'Fatigue', 'Dizziness', 'Muscle Pain', 'Back Pain', 'Joint Pain',
+  // Respiratory & Cardiovascular
+  'Cough', 'Shortness of Breath', 'Chest Pain', 'Palpitations',
+  // Digestive / Gastrointestinal
+  'Abdominal Pain', 'Vomiting', 'Nausea', 'Diarrhea', 'Difficulty Swallowing',
+  // Ear, Nose, Throat (ENT)
+  'Sore Throat', 'Ear Pain', 'Nasal Congestion',
+  // Eye-Related
+  'Blurry Vision', 'Eye Redness/Pain', 'Double Vision',
+  // Neurological, Skin & Other
+  'Numbness/Tingling', 'Confusion', 'Difficulty Speaking', 'Rash', 'Urinary Pain'
 ];
 
 const SymptomForm = ({ onAssessmentCreated }) => {
@@ -41,6 +50,7 @@ const SymptomForm = ({ onAssessmentCreated }) => {
   
   const [secondaryText, setSecondaryText] = useState('');
 
+  const [reportFile, setReportFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -74,17 +84,35 @@ const SymptomForm = ({ onAssessmentCreated }) => {
 
     setLoading(true);
     try {
-      const payload = {
-        ...form,
-        age: parseInt(form.age, 10),
-        weight: form.weight ? parseFloat(form.weight) : undefined,
-        height: form.height ? parseFloat(form.height) : undefined,
-        secondarySymptoms: secondaryText.split(',').map(s => s.trim()).filter(s => s),
-      };
+      const formData = new FormData();
+      formData.append('age', parseInt(form.age, 10));
+      formData.append('gender', form.gender);
+      if (form.weight) formData.append('weight', parseFloat(form.weight));
+      if (form.height) formData.append('height', parseFloat(form.height));
+      formData.append('existingConditions', form.existingConditions);
+      formData.append('currentMedications', form.currentMedications);
+      formData.append('allergies', form.allergies);
+      formData.append('pregnancyStatus', form.pregnancyStatus);
+      formData.append('painLevel', form.painLevel);
+      formData.append('duration', form.duration);
+      formData.append('primarySymptoms', JSON.stringify(form.primarySymptoms));
+      
+      const parsedSecondary = secondaryText.split(',').map(s => s.trim()).filter(s => s);
+      formData.append('secondarySymptoms', JSON.stringify(parsedSecondary));
+      formData.append('symptoms', form.symptoms);
 
-      const assessment = await assessmentService.createAssessment(payload);
+      if (reportFile) {
+        formData.append('medicalReport', reportFile);
+      }
+
+      const assessment = await assessmentService.createAssessment(formData);
       if (onAssessmentCreated) onAssessmentCreated(assessment);
-      navigate(`/assessment/${assessment._id}`);
+      
+      if (assessment.status === 'completed') {
+        navigate(`/assessment/${assessment._id}`);
+      } else {
+        navigate(`/consultation/${assessment._id}`);
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to analyze symptoms. Please try again.');
     } finally {
@@ -249,6 +277,33 @@ const SymptomForm = ({ onAssessmentCreated }) => {
                 rows={3}
                 className="input-field resize-none"
               />
+            </div>
+
+            <div>
+              <label className="label-text flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5" /> Upload Medical Report / Prescription (Optional)
+              </label>
+              <div className="mt-1.5 flex items-center justify-center px-6 pt-5 pb-6 border-2 border-dashed border-border dark:border-slate-700 rounded-xl hover:border-primary transition-colors cursor-pointer relative bg-white dark:bg-slate-800">
+                <input
+                  type="file"
+                  accept=".pdf,.txt"
+                  onChange={(e) => setReportFile(e.target.files[0])}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="space-y-1 text-center pointer-events-none">
+                  <FileText className="mx-auto h-8 w-8 text-text-muted" />
+                  <div className="flex text-xs text-text-secondary dark:text-slate-300">
+                    <span className="font-semibold text-primary">Upload a file</span>
+                    <p className="pl-1">or drag and drop</p>
+                  </div>
+                  <p className="text-[10px] text-text-muted">PDF, TXT up to 5MB</p>
+                  {reportFile && (
+                    <p className="text-xs font-semibold text-emerald-500 mt-2">
+                      Selected: {reportFile.name}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -3,7 +3,9 @@ const mongoose = require('mongoose');
 const possibleConditionSchema = new mongoose.Schema({
   condition: { type: String, required: true },
   confidenceScore: { type: Number, required: true },
-  supportingSymptoms: { type: String, required: true }
+  matchingSymptoms: { type: [String], default: [] },
+  missingSymptoms: { type: [String], default: [] },
+  reasoning: { type: String, required: true }
 }, { _id: false });
 
 const assessmentSchema = new mongoose.Schema(
@@ -24,6 +26,23 @@ const assessmentSchema = new mongoose.Schema(
     pregnancyStatus: { type: String, default: '' },
     painLevel: { type: Number, min: 1, max: 10 },
     duration: { type: String, required: [true, 'Please add symptoms duration'] },
+    status: {
+      type: String,
+      enum: ['consulting', 'completed'],
+      default: 'consulting'
+    },
+    uploadedReportText: {
+      type: String,
+      default: ''
+    },
+    uploadedReportName: {
+      type: String,
+      default: ''
+    },
+    ragKeywords: {
+      type: [String],
+      default: []
+    },
     
     // Symptoms
     primarySymptoms: {
@@ -44,7 +63,7 @@ const assessmentSchema = new mongoose.Schema(
     aiAnalysis: {
       possibleConditions: {
         type: [possibleConditionSchema],
-        required: true,
+        default: [],
       },
       redFlagDetected: {
         type: Boolean,
@@ -57,11 +76,15 @@ const assessmentSchema = new mongoose.Schema(
       },
       recommendedSpecialty: {
         type: String,
-        required: true,
+        default: '',
+      },
+      recommendedSpecialtyExplanation: {
+        type: String,
+        default: '',
       },
       healthAdvice: {
         type: String,
-        required: true,
+        default: '',
       },
       sources: {
         type: [String],

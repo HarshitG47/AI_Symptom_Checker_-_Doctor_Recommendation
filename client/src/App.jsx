@@ -14,6 +14,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import AssessmentDetailPage from './pages/AssessmentDetailPage';
+import ConsultationChatPage from './pages/ConsultationChatPage';
 import HistoryPage from './pages/HistoryPage';
 import ProfilePage from './pages/ProfilePage';
 
@@ -94,6 +95,9 @@ function App() {
                     } />
                     <Route path="/assessment/:id" element={
                       <ProtectedRoute><AssessmentDetailPage /></ProtectedRoute>
+                    } />
+                    <Route path="/consultation/:id" element={
+                      <ProtectedRoute><ConsultationChatPage /></ProtectedRoute>
                     } />
                     <Route path="/history" element={
                       <ProtectedRoute><HistoryPage /></ProtectedRoute>

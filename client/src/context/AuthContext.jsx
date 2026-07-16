@@ -8,21 +8,36 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Restore user from localStorage on mount
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        if (parsedUser && parsedUser.token) {
-          setUser(parsedUser);
-        } else {
+    // Restore user from localStorage on mount and sync with backend
+    const restoreAndSyncUser = async () => {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser && parsedUser.token) {
+            // Set initial restored user first
+            setUser(parsedUser);
+            
+            // Sync with latest profile from backend to get missing fields like createdAt
+            try {
+              const fullProfile = await authService.getProfile();
+              const updatedUser = { ...parsedUser, ...fullProfile };
+              setUser(updatedUser);
+              localStorage.setItem('user', JSON.stringify(updatedUser));
+            } catch (syncErr) {
+              console.warn('[AuthContext] Failed to sync user profile:', syncErr);
+            }
+          } else {
+            localStorage.removeItem('user');
+          }
+        } catch (e) {
           localStorage.removeItem('user');
         }
-      } catch (e) {
-        localStorage.removeItem('user');
       }
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    };
+
+    restoreAndSyncUser();
   }, []);
 
   const login = async (userData) => {

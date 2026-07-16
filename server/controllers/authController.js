@@ -48,6 +48,7 @@ const registerUser = async (req, res, next) => {
         _id: user.id,
         fullName: user.fullName,
         email: user.email,
+        createdAt: user.createdAt,
         token: generateToken(user._id),
       });
     } else {
@@ -77,6 +78,7 @@ const loginUser = async (req, res, next) => {
         _id: user.id,
         fullName: user.fullName,
         email: user.email,
+        createdAt: user.createdAt,
         token: generateToken(user._id),
       });
     } else {

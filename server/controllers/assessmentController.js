@@ -1,5 +1,6 @@
 const Assessment = require('../models/Assessment');
 const aiService = require('../services/aiService');
+const pdfParse = require('pdf-parse');
 
 // Create new symptom assessment
 const createAssessment = async (req, res, next) => {
@@ -15,21 +16,67 @@ const createAssessment = async (req, res, next) => {
       throw new Error('Please fill in all required fields (age, gender, duration, primary symptoms)');
     }
 
+    // Handle multipart form parsing for arrays
+    let parsedPrimary = primarySymptoms;
+    if (typeof primarySymptoms === 'string') {
+      try {
+        parsedPrimary = JSON.parse(primarySymptoms);
+      } catch (e) {
+        parsedPrimary = primarySymptoms.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
+
+    let parsedSecondary = secondarySymptoms;
+    if (typeof secondarySymptoms === 'string') {
+      try {
+        parsedSecondary = JSON.parse(secondarySymptoms);
+      } catch (e) {
+        parsedSecondary = secondarySymptoms.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
+
+    // PDF / Text Report Upload Parsing
+    let uploadedReportText = '';
+    let uploadedReportName = '';
+
+    if (req.file) {
+      try {
+        uploadedReportName = req.file.originalname;
+        if (req.file.mimetype === 'application/pdf') {
+          const pdfData = await pdfParse(req.file.buffer);
+          uploadedReportText = pdfData.text;
+        } else {
+          uploadedReportText = req.file.buffer.toString('utf-8');
+        }
+        console.log(`[File Upload] Successfully parsed ${uploadedReportName} (${uploadedReportText.length} characters)`);
+      } catch (fileErr) {
+        console.warn('[File Upload] Failed to parse report file:', fileErr.message);
+      }
+    }
+
     const patientData = {
       age, gender, weight, height,
       existingConditions, currentMedications, allergies, pregnancyStatus,
-      painLevel, duration, primarySymptoms, secondarySymptoms, symptoms
+      painLevel, duration, 
+      primarySymptoms: parsedPrimary, 
+      secondarySymptoms: parsedSecondary, 
+      symptoms
     };
 
-    // Call AI Service
-    const aiAnalysis = await aiService.getSymptomCheck(patientData);
+    // Run the initial consultation greeting & follow-up questions
+    const result = await aiService.runConsultationStep(patientData, [], uploadedReportText);
 
-    // Save to Database
+    // Save to Database in 'consulting' status
     const assessment = await Assessment.create({
       user: req.user._id,
       ...patientData,
-      aiAnalysis,
-      chatHistory: []
+      status: 'consulting',
+      uploadedReportText,
+      uploadedReportName,
+      ragKeywords: result.ragKeywords || [],
+      chatHistory: [
+        { role: 'assistant', content: result.message }
+      ]
     });
 
     res.status(201).json(assessment);
@@ -154,14 +201,60 @@ const chatFollowUp = async (req, res, next) => {
       throw new Error('User not authorized');
     }
 
-    // Call AI Service with full assessment context and current history
+    // If still in consultation, advance the Q&A state machine
+    if (assessment.status === 'consulting') {
+      assessment.chatHistory.push({ role: 'user', content: message });
+
+      const userTurns = assessment.chatHistory.filter(h => h.role === 'user').length;
+      const isForceRequest = message.toLowerCase().includes('compile the final diagnostic report') || 
+                             message.toLowerCase().includes('diagnose now') || 
+                             message.toLowerCase().includes('complete assessment') ||
+                             message.toLowerCase().includes('finish consultation');
+      
+      const forceComplete = userTurns >= 5 || isForceRequest;
+
+      const result = await aiService.runConsultationStep(
+        assessment,
+        assessment.chatHistory,
+        assessment.uploadedReportText,
+        forceComplete
+      );
+
+      assessment.chatHistory.push({ role: 'assistant', content: result.message });
+
+      // Accumulate RAG keywords across turns, deduplicated
+      if (result.ragKeywords && result.ragKeywords.length > 0) {
+        const merged = new Set([...(assessment.ragKeywords || []), ...result.ragKeywords]);
+        assessment.ragKeywords = [...merged];
+      }
+      
+      if (result.status === 'completed') {
+        assessment.status = 'completed';
+        assessment.aiAnalysis = result.aiAnalysis;
+      }
+
+      await assessment.save();
+      return res.status(200).json(assessment);
+    }
+
+    // Completed assessment: run standard follow-up Q&A
+    // Count only user messages that came AFTER the assessment was completed
+    // (The consulting turns are also in chatHistory, so subtract them)
+    const totalUserMessages = assessment.chatHistory.filter(h => h.role === 'user').length;
+    const FOLLOW_UP_LIMIT = 10;
+
+    if (totalUserMessages >= FOLLOW_UP_LIMIT) {
+      return res.status(429).json({
+        message: `Follow-up chat limit of ${FOLLOW_UP_LIMIT} messages reached. Please start a new assessment if you have more questions.`
+      });
+    }
+
     const aiResponse = await aiService.getChatFollowUp(
       assessment,
       message,
       assessment.chatHistory
     );
 
-    // Push conversation to DB
     assessment.chatHistory.push({ role: 'user', content: message });
     assessment.chatHistory.push({ role: 'assistant', content: aiResponse });
 
