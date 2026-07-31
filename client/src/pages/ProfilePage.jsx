@@ -7,6 +7,21 @@ import authService from '../services/authService';
 const ProfilePage = () => {
   const { user, updateUserProfileState } = useAuth();
   const [form, setForm] = useState({ fullName: '', email: '' });
+  const [profileForm, setProfileForm] = useState({
+    age: '',
+    gender: '',
+    height: '',
+    weight: '',
+    bloodGroup: '',
+    allergies: '',
+    chronicDiseases: '',
+    currentMedications: '',
+    previousSurgeries: '',
+    familyHistory: '',
+    lifestyleInfo: '',
+    smokingStatus: '',
+    alcoholStatus: ''
+  });
   const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
   const [loading, setLoading] = useState(false);
   const [pwLoading, setPwLoading] = useState(false);
@@ -18,6 +33,22 @@ const ProfilePage = () => {
   useEffect(() => {
     if (user) {
       setForm({ fullName: user.fullName || '', email: user.email || '' });
+      const p = user.profile || {};
+      setProfileForm({
+        age: p.age || '',
+        gender: p.gender || '',
+        height: p.height || '',
+        weight: p.weight || '',
+        bloodGroup: p.bloodGroup || '',
+        allergies: p.allergies || '',
+        chronicDiseases: p.chronicDiseases || '',
+        currentMedications: p.currentMedications || '',
+        previousSurgeries: p.previousSurgeries || '',
+        familyHistory: p.familyHistory || '',
+        lifestyleInfo: p.lifestyleInfo || '',
+        smokingStatus: p.smokingStatus || '',
+        alcoholStatus: p.alcoholStatus || ''
+      });
     }
   }, [user]);
 
@@ -27,7 +58,25 @@ const ProfilePage = () => {
     if (!form.fullName || !form.email) return setError('Name and email are required');
     setLoading(true);
     try {
-      const updated = await authService.updateProfile({ fullName: form.fullName, email: form.email });
+      const updated = await authService.updateProfile({ 
+        fullName: form.fullName, 
+        email: form.email,
+        profile: {
+          age: profileForm.age ? parseInt(profileForm.age, 10) : undefined,
+          gender: profileForm.gender,
+          height: profileForm.height ? parseFloat(profileForm.height) : undefined,
+          weight: profileForm.weight ? parseFloat(profileForm.weight) : undefined,
+          bloodGroup: profileForm.bloodGroup,
+          allergies: profileForm.allergies,
+          chronicDiseases: profileForm.chronicDiseases,
+          currentMedications: profileForm.currentMedications,
+          previousSurgeries: profileForm.previousSurgeries,
+          familyHistory: profileForm.familyHistory,
+          lifestyleInfo: profileForm.lifestyleInfo,
+          smokingStatus: profileForm.smokingStatus,
+          alcoholStatus: profileForm.alcoholStatus
+        }
+      });
       updateUserProfileState(updated);
       setSuccess('Profile updated successfully!');
       setTimeout(() => setSuccess(''), 3000);
@@ -104,36 +153,206 @@ const ProfilePage = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="label-text">Full Name</label>
-            <div className="relative">
-              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted dark:text-slate-400" />
-              <input
-                id="profile-name"
-                type="text"
-                value={form.fullName}
-                onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
-                className="input-field pl-10"
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="label-text">Full Name</label>
+              <div className="relative">
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted dark:text-slate-400" />
+                <input
+                  id="profile-name"
+                  type="text"
+                  value={form.fullName}
+                  onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
+                  className="input-field pl-10"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label-text">Email Address</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted dark:text-slate-400" />
+                <input
+                  id="profile-email"
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  className="input-field pl-10"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-border-light dark:border-slate-800 pt-5">
+            <h4 className="text-sm font-bold text-primary mb-4 uppercase tracking-wider">Health Vitals & Attributes</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className="label-text">Age</label>
+                <input
+                  type="number"
+                  value={profileForm.age}
+                  onChange={e => setProfileForm(p => ({ ...p, age: e.target.value }))}
+                  className="input-field"
+                  placeholder="e.g. 30"
+                />
+              </div>
+              <div>
+                <label className="label-text">Gender</label>
+                <select
+                  value={profileForm.gender}
+                  onChange={e => setProfileForm(p => ({ ...p, gender: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="">Select...</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Non-binary">Non-binary</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </div>
+              <div>
+                <label className="label-text">Height (cm)</label>
+                <input
+                  type="number"
+                  value={profileForm.height}
+                  onChange={e => setProfileForm(p => ({ ...p, height: e.target.value }))}
+                  className="input-field"
+                  placeholder="e.g. 175"
+                />
+              </div>
+              <div>
+                <label className="label-text">Weight (kg)</label>
+                <input
+                  type="number"
+                  value={profileForm.weight}
+                  onChange={e => setProfileForm(p => ({ ...p, weight: e.target.value }))}
+                  className="input-field"
+                  placeholder="e.g. 70"
+                />
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className="label-text">Blood Group</label>
+              <select
+                value={profileForm.bloodGroup}
+                onChange={e => setProfileForm(p => ({ ...p, bloodGroup: e.target.value }))}
+                className="input-field"
+              >
+                <option value="">Select blood group...</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="border-t border-border-light dark:border-slate-800 pt-5">
+            <h4 className="text-sm font-bold text-primary mb-4 uppercase tracking-wider">Clinical Background</h4>
+            <div className="space-y-4">
+              <div>
+                <label className="label-text">Allergies (Food, Environmental, Drug conflicts)</label>
+                <input
+                  type="text"
+                  value={profileForm.allergies}
+                  onChange={e => setProfileForm(p => ({ ...p, allergies: e.target.value }))}
+                  className="input-field"
+                  placeholder="e.g. Penicillin, Peanuts"
+                />
+              </div>
+              <div>
+                <label className="label-text">Chronic Diseases / Diagnosed Illnesses</label>
+                <input
+                  type="text"
+                  value={profileForm.chronicDiseases}
+                  onChange={e => setProfileForm(p => ({ ...p, chronicDiseases: e.target.value }))}
+                  className="input-field"
+                  placeholder="e.g. Hypertension, Type 2 Diabetes"
+                />
+              </div>
+              <div>
+                <label className="label-text">Current Medications</label>
+                <input
+                  type="text"
+                  value={profileForm.currentMedications}
+                  onChange={e => setProfileForm(p => ({ ...p, currentMedications: e.target.value }))}
+                  className="input-field"
+                  placeholder="e.g. Metformin 500mg, Lisinopril 10mg"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="label-text">Previous Surgeries / Operations</label>
+                  <input
+                    type="text"
+                    value={profileForm.previousSurgeries}
+                    onChange={e => setProfileForm(p => ({ ...p, previousSurgeries: e.target.value }))}
+                    className="input-field"
+                    placeholder="e.g. Appendectomy (2018)"
+                  />
+                </div>
+                <div>
+                  <label className="label-text">Family Medical History</label>
+                  <input
+                    type="text"
+                    value={profileForm.familyHistory}
+                    onChange={e => setProfileForm(p => ({ ...p, familyHistory: e.target.value }))}
+                    className="input-field"
+                    placeholder="e.g. Mother: Hypertension, Father: Coronary Artery Disease"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-border-light dark:border-slate-800 pt-5">
+            <h4 className="text-sm font-bold text-primary mb-4 uppercase tracking-wider">Habits & Lifestyle</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label-text">Smoking Status</label>
+                <select
+                  value={profileForm.smokingStatus}
+                  onChange={e => setProfileForm(p => ({ ...p, smokingStatus: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="">Select status...</option>
+                  <option value="non-smoker">Non-Smoker</option>
+                  <option value="smoker">Active Smoker</option>
+                </select>
+              </div>
+              <div>
+                <label className="label-text">Alcohol Consumption</label>
+                <select
+                  value={profileForm.alcoholStatus}
+                  onChange={e => setProfileForm(p => ({ ...p, alcoholStatus: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="">Select status...</option>
+                  <option value="non-drinker">Non-Drinker</option>
+                  <option value="occasional">Occasional / Social</option>
+                  <option value="regular">Regular Drinker</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className="label-text">Lifestyle, Diet & Activity Information</label>
+              <textarea
+                value={profileForm.lifestyleInfo}
+                onChange={e => setProfileForm(p => ({ ...p, lifestyleInfo: e.target.value }))}
+                className="input-field resize-none"
+                rows={2}
+                placeholder="e.g. Sedentary job, vegetarian diet, exercises once a week"
               />
             </div>
           </div>
-          <div>
-            <label className="label-text">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted dark:text-slate-400" />
-              <input
-                id="profile-email"
-                type="email"
-                value={form.email}
-                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                className="input-field pl-10"
-              />
-            </div>
-          </div>
-          <button type="submit" disabled={loading} id="profile-save" className="btn-primary py-2.5 text-sm flex items-center gap-2 disabled:opacity-60 disabled:scale-100">
+
+          <button type="submit" disabled={loading} id="profile-save" className="btn-primary w-full py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:scale-100 shadow-lg shadow-primary/20">
             {loading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
-            {loading ? 'Saving...' : 'Save Changes'}
+            {loading ? 'Saving Changes...' : 'Save Health Profile'}
           </button>
         </form>
       </div>

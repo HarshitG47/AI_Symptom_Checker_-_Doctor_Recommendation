@@ -50,11 +50,25 @@ const searchMedlinePlus = async (query) => {
   }
 };
 
-const getConsultationPrompt = (patientData, medicalContext, chatHistory, uploadedText, forceComplete = false) => `
-You are dooper, an expert AI Clinical Triage & Consultation Assistant.
-Conduct an interactive, conversational medical triage with the patient. 
+const getConsultationPrompt = (patientData, medicalContext, chatHistory, uploadedText, forceComplete = false, userProfileText = '', pastHistoryText = '') => `
+You are the Lead Coordinator Agent of an expert Virtual Multi-Agent Clinical Triage & Consultation Board.
+Your goal is to conduct an interactive medical triage and produce a highly integrated healthcare guidance summary.
 
-Initial Patient Profile:
+To construct your responses, you orchestrate and aggregate findings from 6 specialized virtual agents:
+1. **Symptom Analysis Agent**: Evaluates patient primary/secondary symptoms and notes to form a differential diagnosis.
+2. **Medical Knowledge Agent**: Cross-references symptoms with trusted evidence from MedlinePlus, CDC, WHO, and NHS.
+3. **Medical Report Agent**: Parses and analyzes any uploaded clinical records, reports, or lab results.
+4. **Medication Safety Agent**: Cross-references patient allergies and current medications against newly recommended drugs or conditions to catch duplications, safety risks, and conflicts.
+5. **Care Plan Agent**: Designs highly tailored recovery actions (diet, hydration, exercise, sleep, lifestyle improvements).
+6. **Emergency Detection Agent**: Continuously scans for life-threatening emergency signs.
+
+Patient Health Profile (Persistent):
+${userProfileText || 'No background profile declared.'}
+
+Long-Term Consultation History (Memory):
+${pastHistoryText || 'No previous consultations recorded.'}
+
+Current Consultation Profile:
 - Age: ${patientData.age}
 - Gender: ${patientData.gender}
 - Weight: ${patientData.weight || 'N/A'} kg
@@ -69,9 +83,9 @@ Initial Patient Profile:
 - Secondary Symptoms: ${patientData.secondarySymptoms?.join(', ') || 'None'}
 - Initial Description: ${patientData.symptoms || 'None'}
 
-${uploadedText ? `Uploaded Medical Report/Prescription Content:\n${uploadedText}\n` : ''}
+${uploadedText ? `Uploaded Medical Report/Prescription Content (analyzed by Medical Report Agent):\n${uploadedText}\n` : ''}
 
-Trusted Medical Knowledge Base Context:
+Trusted Medical Knowledge Base Context (analyzed by Medical Knowledge Agent):
 ${medicalContext || 'No specific context retrieved.'}
 
 Consultation Chat History:
@@ -99,17 +113,69 @@ Return a JSON object with this exact structure:
       {
         "condition": "string (name of condition)",
         "confidenceScore": number (percentage 0-100),
-        "matchingSymptoms": ["string (patient symptoms matching this condition)"],
-        "missingSymptoms": ["string (expected symptoms of this condition that the patient does not have)"],
-        "reasoning": "string (clear clinical explanation of why this matches or does not match)"
+        "matchingSymptoms": ["string"],
+        "missingSymptoms": ["string"],
+        "reasoning": "string"
       }
     ], // Generate exactly 5 conditions ONLY if status is 'completed'. If status is 'consulting', leave as empty array []
     "redFlagDetected": boolean,
     "severityLevel": "Mild" or "Moderate" or "Severe",
     "recommendedSpecialty": "string",
-    "recommendedSpecialtyExplanation": "string (why this specialty is recommended based on symptoms and conditions)",
-    "healthAdvice": "string (safe home-care advice, NEVER prescribe specific medications)",
-    "sources": ["string (trusted medical references used, e.g. WHO, CDC, NHS, MedlinePlus)"]
+    "recommendedSpecialtyExplanation": "string",
+    "healthAdvice": "string (home-care advice)",
+    "sources": ["string (references used)"],
+    "carePlan": {
+      "dietSuggestions": ["string (foods to eat/avoid)"],
+      "exerciseRecommendations": ["string (activity level advice)"],
+      "hydrationGoals": "string (liters/day target)",
+      "sleepAdvice": "string",
+      "lifestyleImprovements": ["string"],
+      "followUpTimeline": "string (when to review again)"
+    },
+    "medicationSafety": {
+      "duplicateMedications": [
+        { "name": "string", "reason": "string" }
+      ], // Warn if the patient profile currentMedications matches or overlaps duplicate purposes
+      "allergyConflicts": [
+        { "name": "string", "conflict": "string" }
+      ], // Cross reference patient profile allergies with any medications discussed
+      "drugInteractions": [
+        { "meds": ["medA", "medB"], "severity": "Mild/Moderate/Major", "description": "string" }
+      ], // Cross reference any proposed medications or existing medications
+      "highRiskCombinations": [
+        { "meds": ["medA", "medB"], "warning": "string" }
+      ],
+      "alerts": ["string (general safety alerts)"]
+    },
+    "serviceRecommendations": [
+      {
+        "serviceName": "Doctor Consultation" or "Lab Test" or "Health Checkup" or "Home Nursing" or "Physiotherapy" or "Vaccination" or "Medicine Delivery" or "Home Sample Collection",
+        "description": "string",
+        "reason": "string (clinical reasoning linking user case to this service)",
+        "actionText": "string (e.g. 'Book Doctor Consultation')"
+      }
+    ], // Recommend relevant Dooper service(s) when status is 'completed'
+    "agentContributions": [
+      {
+        "agentName": "Symptom Analysis Agent" or "Medical Knowledge Agent" or "Medical Report Agent" or "Medication Safety Agent" or "Care Plan Agent" or "Emergency Detection Agent",
+        "contribution": "string (detailed finding from this specific agent)"
+      }
+    ], // Populate details of contributions from all 6 agents when status is 'completed'
+    "labTrends": [
+      {
+        "biomarker": "blood_sugar" or "hemoglobin" or "vitamin_d" or "cholesterol",
+        "value": number,
+        "unit": "string",
+        "trend": "string (e.g. stable, rising, falling)"
+      }
+    ],
+    "extractedBiomarkers": [
+      {
+        "biomarker": "blood_sugar" or "hemoglobin" or "vitamin_d" or "cholesterol",
+        "value": number,
+        "unit": "string"
+      }
+    ] // Parse and extract any numeric lab values found in the uploaded text excerpt. Leave empty if none found.
   }
 }
 `;
@@ -333,7 +399,7 @@ Rules:
   return null;
 };
 
-const runConsultationStep = async (patientData, chatHistory, uploadedText, forceComplete = false) => {
+const runConsultationStep = async (patientData, chatHistory, uploadedText, forceComplete = false, userProfileText = '', pastHistoryText = '') => {
   // 1. Dynamic RAG: Use AI to extract enriched clinical keywords from evolving context
   let medicalContext = '';
   let usedKeywords = [];
@@ -368,8 +434,8 @@ const runConsultationStep = async (patientData, chatHistory, uploadedText, force
     }
   }
 
-  // 3. Generate Prompt with enriched medical context
-  const prompt = getConsultationPrompt(patientData, medicalContext, chatHistory, uploadedText, forceComplete);
+  // 3. Generate Prompt with enriched medical context, patient profile details, and history memory
+  const prompt = getConsultationPrompt(patientData, medicalContext, chatHistory, uploadedText, forceComplete, userProfileText, pastHistoryText);
 
   if (process.env.OPENROUTER_API_KEY) {
     for (const model of OPENROUTER_MODELS) {

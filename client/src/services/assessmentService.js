@@ -33,6 +33,48 @@ const assessmentService = {
   chatFollowUp: async (id, message) => {
     const response = await api.post(`/assessments/${id}/chat`, { message });
     return response.data;
+  },
+
+  // Get reminders
+  getReminders: async () => {
+    const response = await api.get('/reminders');
+    return response.data;
+  },
+
+  // Toggle reminder status
+  toggleReminder: async (id) => {
+    const response = await api.put(`/reminders/${id}`);
+    return response.data;
+  },
+
+  // Create custom reminder
+  createReminder: async (reminderData) => {
+    const response = await api.post('/reminders', reminderData);
+    return response.data;
+  },
+
+  // Delete reminder
+  deleteReminder: async (id) => {
+    const response = await api.delete(`/reminders/${id}`);
+    return response.data;
+  },
+
+  // Get Health Timeline
+  getTimeline: async () => {
+    const response = await api.get('/analytics/timeline');
+    return response.data;
+  },
+
+  // Get Lab Trends
+  getTrends: async () => {
+    const response = await api.get('/analytics/trends');
+    return response.data;
+  },
+
+  // Get Health Summary
+  getSummary: async () => {
+    const response = await api.get('/analytics/summary');
+    return response.data;
   }
 };
 

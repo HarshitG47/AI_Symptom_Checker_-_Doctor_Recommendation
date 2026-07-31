@@ -11,6 +11,7 @@ const getUserProfile = async (req, res, next) => {
         fullName: user.fullName,
         email: user.email,
         createdAt: user.createdAt,
+        profile: user.profile || {},
       });
     } else {
       res.status(404);
@@ -19,33 +20,42 @@ const getUserProfile = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-};
-
-// Update user profile
-const updateUserProfile = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id);
-
-    if (user) {
-      user.fullName = req.body.fullName || user.fullName;
-      user.email = req.body.email || user.email;
-
-      if (req.body.password) {
-        user.password = req.body.password;
-      }
-
-      const updatedUser = await user.save();
-
-      res.json({
-        _id: updatedUser.id,
-        fullName: updatedUser.fullName,
-        email: updatedUser.email,
-        createdAt: updatedUser.createdAt,
-      });
-    } else {
-      res.status(404);
-      throw new Error('User not found');
-    }
+ };
+ 
+ // Update user profile
+ const updateUserProfile = async (req, res, next) => {
+   try {
+     const user = await User.findById(req.user.id);
+ 
+     if (user) {
+       user.fullName = req.body.fullName || user.fullName;
+       user.email = req.body.email || user.email;
+ 
+       if (req.body.password) {
+         user.password = req.body.password;
+       }
+ 
+       // Update profile subdocument fields if passed in request
+       if (req.body.profile) {
+         user.profile = {
+           ...user.profile,
+           ...req.body.profile
+         };
+       }
+ 
+       const updatedUser = await user.save();
+ 
+       res.json({
+         _id: updatedUser.id,
+         fullName: updatedUser.fullName,
+         email: updatedUser.email,
+         createdAt: updatedUser.createdAt,
+         profile: updatedUser.profile || {},
+       });
+     } else {
+       res.status(404);
+       throw new Error('User not found');
+     }
   } catch (error) {
     next(error);
   }

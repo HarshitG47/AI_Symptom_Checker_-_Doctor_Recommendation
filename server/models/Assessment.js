@@ -94,6 +94,64 @@ const assessmentSchema = new mongoose.Schema(
         type: String,
         default: 'This assessment is AI-generated and should not be considered a medical diagnosis. Please consult a licensed healthcare professional for proper evaluation and treatment.',
       },
+      carePlan: {
+        dietSuggestions: { type: [String], default: [] },
+        exerciseRecommendations: { type: [String], default: [] },
+        hydrationGoals: { type: String, default: '' },
+        sleepAdvice: { type: String, default: '' },
+        lifestyleImprovements: { type: [String], default: [] },
+        followUpTimeline: { type: String, default: '' }
+      },
+      medicationSafety: {
+        duplicateMedications: [
+          {
+            name: { type: String },
+            reason: { type: String }
+          }
+        ],
+        allergyConflicts: [
+          {
+            name: { type: String },
+            conflict: { type: String }
+          }
+        ],
+        drugInteractions: [
+          {
+            meds: { type: [String] },
+            severity: { type: String },
+            description: { type: String }
+          }
+        ],
+        highRiskCombinations: [
+          {
+            meds: { type: [String] },
+            warning: { type: String }
+          }
+        ],
+        alerts: { type: [String], default: [] }
+      },
+      serviceRecommendations: [
+        {
+          serviceName: { type: String },
+          description: { type: String },
+          reason: { type: String },
+          actionText: { type: String }
+        }
+      ],
+      agentContributions: [
+        {
+          agentName: { type: String },
+          contribution: { type: String }
+        }
+      ],
+      labTrends: [
+        {
+          biomarker: { type: String },
+          value: { type: Number },
+          unit: { type: String },
+          trend: { type: String }
+        }
+      ]
     },
     chatHistory: [
       {

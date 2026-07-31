@@ -22,6 +22,29 @@ const userSchema = new mongoose.Schema(
       minlength: [6, 'Password must be at least 6 characters long'],
       select: false,
     },
+    profile: {
+      age: { type: Number },
+      gender: { type: String },
+      height: { type: Number }, // in cm
+      weight: { type: Number }, // in kg
+      bloodGroup: { type: String, default: '' },
+      allergies: { type: String, default: '' },
+      chronicDiseases: { type: String, default: '' },
+      currentMedications: { type: String, default: '' },
+      previousSurgeries: { type: String, default: '' },
+      familyHistory: { type: String, default: '' },
+      lifestyleInfo: { type: String, default: '' },
+      smokingStatus: {
+        type: String,
+        enum: ['smoker', 'non-smoker', ''],
+        default: ''
+      },
+      alcoholStatus: {
+        type: String,
+        enum: ['non-drinker', 'occasional', 'regular', ''],
+        default: ''
+      }
+    }
   },
   {
     timestamps: true,

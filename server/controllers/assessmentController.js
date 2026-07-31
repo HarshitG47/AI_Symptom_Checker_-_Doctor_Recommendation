@@ -1,4 +1,7 @@
 const Assessment = require('../models/Assessment');
+const User = require('../models/User');
+const Reminder = require('../models/Reminder');
+const LabResult = require('../models/LabResult');
 const aiService = require('../services/aiService');
 const pdfParse = require('pdf-parse');
 
@@ -63,8 +66,48 @@ const createAssessment = async (req, res, next) => {
       symptoms
     };
 
+    // Fetch persistent profile of the user
+    const user = await User.findById(req.user._id);
+    let userProfileText = '';
+    if (user && user.profile) {
+      const p = user.profile;
+      userProfileText = `
+- Blood Group: ${p.bloodGroup || 'N/A'}
+- allergies: ${p.allergies || 'None'}
+- Chronic Diseases: ${p.chronicDiseases || 'None'}
+- Current Medications: ${p.currentMedications || 'None'}
+- Previous Surgeries: ${p.previousSurgeries || 'None'}
+- Family History: ${p.familyHistory || 'None'}
+- Lifestyle Details: ${p.lifestyleInfo || 'None'}
+- Smoking Status: ${p.smokingStatus || 'N/A'}
+- Alcohol Status: ${p.alcoholStatus || 'N/A'}
+- Height: ${p.height ? `${p.height} cm` : 'N/A'}
+- Weight: ${p.weight ? `${p.weight} kg` : 'N/A'}
+      `.trim();
+    }
+
+    // Fetch past completed assessments for long-term memory
+    const pastAssessments = await Assessment.find({ user: req.user._id, status: 'completed' }).sort({ createdAt: -1 }).limit(5);
+    let pastHistoryText = '';
+    if (pastAssessments && pastAssessments.length > 0) {
+      pastHistoryText = pastAssessments.map((a, idx) => `
+Past Assessment #${idx + 1} (${new Date(a.createdAt).toLocaleDateString()}):
+- Symptoms: ${a.primarySymptoms?.join(', ')}
+- Diagnosis: ${a.aiAnalysis?.possibleConditions?.[0]?.condition || 'N/A'} (Confidence: ${a.aiAnalysis?.possibleConditions?.[0]?.confidenceScore || 0}%)
+- Severity: ${a.aiAnalysis?.severityLevel}
+- Recommended Care Action: ${a.aiAnalysis?.healthAdvice}
+      `.trim()).join('\n---\n');
+    }
+
     // Run the initial consultation greeting & follow-up questions
-    const result = await aiService.runConsultationStep(patientData, [], uploadedReportText);
+    const result = await aiService.runConsultationStep(
+      patientData,
+      [],
+      uploadedReportText,
+      false,
+      userProfileText,
+      pastHistoryText
+    );
 
     // Save to Database in 'consulting' status
     const assessment = await Assessment.create({
@@ -213,11 +256,46 @@ const chatFollowUp = async (req, res, next) => {
       
       const forceComplete = userTurns >= 5 || isForceRequest;
 
+      // Fetch user profile
+      const user = await User.findById(req.user._id);
+      let userProfileText = '';
+      if (user && user.profile) {
+        const p = user.profile;
+        userProfileText = `
+- Blood Group: ${p.bloodGroup || 'N/A'}
+- Allergies: ${p.allergies || 'None'}
+- Chronic Diseases: ${p.chronicDiseases || 'None'}
+- Current Medications: ${p.currentMedications || 'None'}
+- Previous Surgeries: ${p.previousSurgeries || 'None'}
+- Family History: ${p.familyHistory || 'None'}
+- Lifestyle Details: ${p.lifestyleInfo || 'None'}
+- Smoking Status: ${p.smokingStatus || 'N/A'}
+- Alcohol Status: ${p.alcoholStatus || 'N/A'}
+- Height: ${p.height ? `${p.height} cm` : 'N/A'}
+- Weight: ${p.weight ? `${p.weight} kg` : 'N/A'}
+        `.trim();
+      }
+
+      // Fetch user previous completed assessments (memory)
+      const pastAssessments = await Assessment.find({ user: req.user._id, status: 'completed', _id: { $ne: assessment._id } }).sort({ createdAt: -1 }).limit(5);
+      let pastHistoryText = '';
+      if (pastAssessments && pastAssessments.length > 0) {
+        pastHistoryText = pastAssessments.map((a, idx) => `
+Past Assessment #${idx + 1} (${new Date(a.createdAt).toLocaleDateString()}):
+- Symptoms: ${a.primarySymptoms?.join(', ')}
+- Diagnosis: ${a.aiAnalysis?.possibleConditions?.[0]?.condition || 'N/A'} (Confidence: ${a.aiAnalysis?.possibleConditions?.[0]?.confidenceScore || 0}%)
+- Severity: ${a.aiAnalysis?.severityLevel}
+- Recommended Care Action: ${a.aiAnalysis?.healthAdvice}
+        `.trim()).join('\n---\n');
+      }
+
       const result = await aiService.runConsultationStep(
         assessment,
         assessment.chatHistory,
         assessment.uploadedReportText,
-        forceComplete
+        forceComplete,
+        userProfileText,
+        pastHistoryText
       );
 
       assessment.chatHistory.push({ role: 'assistant', content: result.message });
@@ -231,6 +309,58 @@ const chatFollowUp = async (req, res, next) => {
       if (result.status === 'completed') {
         assessment.status = 'completed';
         assessment.aiAnalysis = result.aiAnalysis;
+
+        // Save structured LabResults if any were extracted
+        if (result.aiAnalysis.extractedBiomarkers && result.aiAnalysis.extractedBiomarkers.length > 0) {
+          try {
+            for (const lr of result.aiAnalysis.extractedBiomarkers) {
+              await LabResult.create({
+                user: req.user._id,
+                biomarker: lr.biomarker,
+                value: lr.value,
+                unit: lr.unit,
+                date: new Date(),
+                sourceAssessment: assessment._id
+              });
+            }
+            console.log(`[Lab Extraction] Successfully saved ${result.aiAnalysis.extractedBiomarkers.length} lab records.`);
+          } catch (lrErr) {
+            console.warn('[Lab Extraction] Failed to save biomarkers:', lrErr.message);
+          }
+        }
+
+        // Generate automated reminders based on care plan recommendations
+        try {
+          // Default check-up reminder
+          await Reminder.create({
+            user: req.user._id,
+            title: `Schedule follow-up for: ${result.aiAnalysis.possibleConditions?.[0]?.condition || 'symptoms evaluation'}`,
+            type: 'consultation',
+            dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days
+            associatedAssessment: assessment._id
+          });
+
+          // Service follow-ups
+          if (result.aiAnalysis.serviceRecommendations && result.aiAnalysis.serviceRecommendations.length > 0) {
+            for (const s of result.aiAnalysis.serviceRecommendations) {
+              let rType = 'checkup';
+              if (s.serviceName.includes('Lab') || s.serviceName.includes('Sample')) rType = 'lab';
+              else if (s.serviceName.includes('Doctor') || s.serviceName.includes('Consult')) rType = 'consultation';
+              else if (s.serviceName.includes('Medicine')) rType = 'medication';
+
+              await Reminder.create({
+                user: req.user._id,
+                title: `Action: Book ${s.serviceName} (${s.description})`,
+                type: rType,
+                dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // 2 days
+                associatedAssessment: assessment._id
+              });
+            }
+          }
+          console.log('[Reminder Scheduler] Created follow-up checkups.');
+        } catch (remErr) {
+          console.warn('[Reminder Scheduler] Failed to save follow-ups:', remErr.message);
+        }
       }
 
       await assessment.save();

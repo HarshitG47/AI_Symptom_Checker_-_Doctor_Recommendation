@@ -18,6 +18,8 @@ app.use(express.urlencoded({ extended: false }));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/assessments', require('./routes/assessmentRoutes'));
+app.use('/api/reminders', require('./routes/reminderRoutes'));
+app.use('/api/analytics', require('./routes/analyticsRoutes'));
 
 // Error Handler
 app.use(errorHandler);

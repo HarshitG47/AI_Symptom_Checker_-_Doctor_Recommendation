@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, Stethoscope, Activity, AlertTriangle,
   User, Clock, Calendar, Pill, MessageSquare,
-  AlertCircle, CheckCircle, Shield, Heart, FileText, FileSearch
+  AlertCircle, CheckCircle, Shield, Heart, FileText, FileSearch, Brain
 } from 'lucide-react';
 import assessmentService from '../services/assessmentService';
 import ChatFollowUp from '../components/dashboard/ChatFollowUp';
@@ -42,6 +42,31 @@ const AssessmentDetailPage = () => {
   const [error, setError] = useState('');
   const [showChat, setShowChat] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState('');
+  const [bookingLoadingId, setBookingLoadingId] = useState(null);
+
+  const handleBookService = async (svc, idx) => {
+    setBookingLoadingId(idx);
+    try {
+      let rType = 'checkup';
+      if (svc.serviceName.includes('Lab') || svc.serviceName.includes('Sample')) rType = 'lab';
+      else if (svc.serviceName.includes('Doctor') || svc.serviceName.includes('Consult')) rType = 'consultation';
+      else if (svc.serviceName.includes('Medicine')) rType = 'medication';
+
+      await assessmentService.createReminder({
+        title: `Dooper Booked: ${svc.serviceName} - ${svc.description.slice(0, 45)}...`,
+        type: rType,
+        dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000) // tomorrow
+      });
+
+      setBookingSuccess(`Your booking request for ${svc.serviceName} has been initialized! An active care reminder was added to your Dashboard.`);
+      setTimeout(() => setBookingSuccess(''), 5000);
+    } catch (err) {
+      console.error('Failed to book service:', err);
+    } finally {
+      setBookingLoadingId(null);
+    }
+  };
 
   useEffect(() => {
     const fetch = async () => {
@@ -292,6 +317,47 @@ const AssessmentDetailPage = () => {
       const adviceHeight = addWrappedText(assessment.aiAnalysis.healthAdvice, margin, y, contentWidth, 9, 'normal', [71, 85, 105]);
       y += adviceHeight + 8;
 
+      // --- Care Plan Details in PDF ---
+      if (assessment.aiAnalysis.carePlan) {
+        const cp = assessment.aiAnalysis.carePlan;
+        checkSpace(40);
+        addText('Personalized Recovery Care Plan', margin, y, 11, 'bold', [30, 41, 59]);
+        y += 5;
+        
+        let cpText = '';
+        if (cp.dietSuggestions?.length) cpText += `Diet: ${cp.dietSuggestions.join(', ')}\n`;
+        if (cp.exerciseRecommendations?.length) cpText += `Activity: ${cp.exerciseRecommendations.join(', ')}\n`;
+        if (cp.hydrationGoals) cpText += `Hydration: ${cp.hydrationGoals}\n`;
+        if (cp.sleepAdvice) cpText += `Sleep/Rest: ${cp.sleepAdvice}\n`;
+        if (cp.followUpTimeline) cpText += `Timeline: ${cp.followUpTimeline}\n`;
+        
+        const cpHeight = addWrappedText(cpText.trim(), margin, y, contentWidth, 9, 'normal', [71, 85, 105]);
+        y += cpHeight + 8;
+      }
+
+      // --- Medication Safety details in PDF ---
+      if (assessment.aiAnalysis.medicationSafety) {
+        const ms = assessment.aiAnalysis.medicationSafety;
+        let msText = '';
+        if (ms.duplicateMedications?.length) {
+          msText += `Duplicate Meds: ${ms.duplicateMedications.map(m => `${m.name} (${m.reason})`).join(', ')}\n`;
+        }
+        if (ms.allergyConflicts?.length) {
+          msText += `Allergy Conflicts: ${ms.allergyConflicts.map(m => `${m.name} (${m.conflict})`).join(', ')}\n`;
+        }
+        if (ms.drugInteractions?.length) {
+          msText += `Interactions: ${ms.drugInteractions.map(m => `${m.meds.join(' & ')}: ${m.description}`).join('; ')}\n`;
+        }
+        
+        if (msText) {
+          checkSpace(30);
+          addText('Medication Safety Audit Warnings', margin, y, 11, 'bold', [220, 38, 38]);
+          y += 5;
+          const msHeight = addWrappedText(msText.trim(), margin, y, contentWidth, 9, 'normal', [220, 38, 38]);
+          y += msHeight + 8;
+        }
+      }
+
       // --- Sources ---
       checkSpace(18);
       addText('References & Sources Consulted', margin, y, 9, 'bold', [148, 163, 184]);
@@ -510,6 +576,48 @@ const AssessmentDetailPage = () => {
              </div>
           </div>
 
+          {/* Medication Safety and Interaction Intelligence */}
+          {assessment.aiAnalysis?.medicationSafety && (
+            <div className="card border-red-200/55 dark:border-red-950/40 bg-gradient-to-br from-red-500/5 to-transparent">
+              <h2 className="text-sm font-bold text-red-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Pill className="w-4 h-4"/> Medication Safety Auditing (Medication Safety Agent)
+              </h2>
+              <div className="space-y-3">
+                {assessment.aiAnalysis.medicationSafety.duplicateMedications?.length > 0 && (
+                  <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-150 rounded-xl">
+                    <p className="text-xs font-bold text-red-600 dark:text-red-400">Duplicate Medication Warning:</p>
+                    {assessment.aiAnalysis.medicationSafety.duplicateMedications.map((m, idx) => (
+                      <p key={idx} className="text-xs text-red-700 dark:text-red-500 mt-1">⚠️ <strong>{m.name}:</strong> {m.reason}</p>
+                    ))}
+                  </div>
+                )}
+                {assessment.aiAnalysis.medicationSafety.allergyConflicts?.length > 0 && (
+                  <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-150 rounded-xl">
+                    <p className="text-xs font-bold text-red-600 dark:text-red-400">Allergy/Contraindication Conflict:</p>
+                    {assessment.aiAnalysis.medicationSafety.allergyConflicts.map((m, idx) => (
+                      <p key={idx} className="text-xs text-red-700 dark:text-red-500 mt-1">⚠️ <strong>{m.name}:</strong> {m.conflict}</p>
+                    ))}
+                  </div>
+                )}
+                {assessment.aiAnalysis.medicationSafety.drugInteractions?.length > 0 && (
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-xl">
+                    <p className="text-xs font-bold text-amber-600 dark:text-amber-400">Drug-Drug Interactions Audited:</p>
+                    {assessment.aiAnalysis.medicationSafety.drugInteractions.map((m, idx) => (
+                      <p key={idx} className="text-xs text-amber-700 dark:text-amber-550 mt-1">
+                        ⚡ <strong>{m.meds.join(' + ')}</strong> ({m.severity} severity): {m.description}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {(!assessment.aiAnalysis.medicationSafety.duplicateMedications?.length && 
+                  !assessment.aiAnalysis.medicationSafety.allergyConflicts?.length && 
+                  !assessment.aiAnalysis.medicationSafety.drugInteractions?.length) && (
+                  <p className="text-xs text-text-secondary dark:text-slate-400">✅ No duplicate medications, allergy conflicts, or severe drug interactions detected in your profile.</p>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {/* Recommended Specialty */}
             <div className="card h-full flex flex-col justify-between">
@@ -546,6 +654,99 @@ const AssessmentDetailPage = () => {
             </div>
           </div>
 
+          {/* Personalized Recovery Care Plan */}
+          {assessment.aiAnalysis?.carePlan && (
+            <div className="card">
+              <h2 className="text-sm font-bold text-text-secondary dark:text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Heart className="w-4 h-4 text-primary"/> Personalized Recovery Care Plan (Care Plan Agent)
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm">
+                <div className="space-y-3">
+                  {assessment.aiAnalysis.carePlan.dietSuggestions?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold text-primary uppercase">Dietary Guidelines</p>
+                      <ul className="list-disc list-inside text-xs text-text-secondary dark:text-slate-300 mt-1 space-y-1">
+                        {assessment.aiAnalysis.carePlan.dietSuggestions.map((d, i) => <li key={i}>{d}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {assessment.aiAnalysis.carePlan.exerciseRecommendations?.length > 0 && (
+                    <div className="pt-2">
+                      <p className="text-xs font-bold text-primary uppercase">Activity & Exercise</p>
+                      <ul className="list-disc list-inside text-xs text-text-secondary dark:text-slate-300 mt-1 space-y-1">
+                        {assessment.aiAnalysis.carePlan.exerciseRecommendations.map((e, i) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  {assessment.aiAnalysis.carePlan.hydrationGoals && (
+                    <div>
+                      <p className="text-xs font-bold text-primary uppercase">Hydration Target</p>
+                      <p className="text-xs text-text-secondary dark:text-slate-300 mt-1">{assessment.aiAnalysis.carePlan.hydrationGoals}</p>
+                    </div>
+                  )}
+                  {assessment.aiAnalysis.carePlan.sleepAdvice && (
+                    <div className="pt-2">
+                      <p className="text-xs font-bold text-primary uppercase">Sleep & Rest Guidelines</p>
+                      <p className="text-xs text-text-secondary dark:text-slate-300 mt-1">{assessment.aiAnalysis.carePlan.sleepAdvice}</p>
+                    </div>
+                  )}
+                  {assessment.aiAnalysis.carePlan.followUpTimeline && (
+                    <div className="pt-2">
+                      <p className="text-xs font-bold text-primary uppercase">Clinical Follow-up Timeline</p>
+                      <p className="text-xs text-text-secondary dark:text-slate-350 mt-1 font-semibold text-emerald-600 dark:text-emerald-450">{assessment.aiAnalysis.carePlan.followUpTimeline}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Actionable Healthcare Service Recommendations */}
+          {assessment.aiAnalysis?.serviceRecommendations?.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-text-secondary dark:text-slate-350 uppercase tracking-wider mb-1 px-1">Relevant Dooper Healthcare Services</h3>
+              
+              {bookingSuccess && (
+                <div className="flex items-center gap-2.5 p-3.5 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl text-green-700 dark:text-green-400 text-xs font-semibold animate-fade-in">
+                  <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                  <p>{bookingSuccess}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {assessment.aiAnalysis.serviceRecommendations.map((svc, i) => (
+                  <div key={i} className="p-4 bg-white/70 dark:bg-slate-900/60 border border-border-light dark:border-slate-800 rounded-2xl flex flex-col justify-between hover:border-primary/30 transition-all shadow-sm">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-bold text-primary uppercase tracking-wide">{svc.serviceName}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">Dooper</span>
+                      </div>
+                      <p className="text-xs font-bold text-text-primary dark:text-slate-100 mt-1.5">{svc.description}</p>
+                      <p className="text-[11px] text-text-muted dark:text-slate-400 mt-1 leading-relaxed">{svc.reason}</p>
+                    </div>
+                    <button 
+                      onClick={() => handleBookService(svc, i)}
+                      disabled={bookingLoadingId !== null}
+                      className="btn-primary py-2 text-xs font-bold w-full mt-4 bg-primary/10 hover:bg-primary text-primary hover:text-white border border-primary/20 flex items-center justify-center gap-1.5"
+                    >
+                      {bookingLoadingId === i ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                          <span>Initializing...</span>
+                        </>
+                      ) : (
+                        svc.actionText || `Book ${svc.serviceName}`
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+
           {/* Sources */}
           {assessment.aiAnalysis?.sources && assessment.aiAnalysis.sources.length > 0 && (
             <div className="card bg-surface-hover/50 dark:bg-slate-800/30">
@@ -560,6 +761,29 @@ const AssessmentDetailPage = () => {
                    </span>
                  ))}
                </div>
+            </div>
+          )}
+
+          {/* Explainable AI Dashboard Tab — Agent Contributions */}
+          {assessment.aiAnalysis?.agentContributions?.length > 0 && (
+            <div className="card border-blue-200/55 dark:border-blue-950/40 bg-gradient-to-br from-blue-500/5 to-transparent">
+              <div className="flex items-center gap-2 mb-3">
+                <Brain className="w-4 h-4 text-blue-500" />
+                <h3 className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                  Explainable AI Dashboard: Board Contributions
+                </h3>
+              </div>
+              <p className="text-[11px] text-text-muted dark:text-slate-400 mb-3">
+                This diagnostic output was compiled by orchestrating multiple specialized clinical agents. Review their individual diagnostic contributions below:
+              </p>
+              <div className="space-y-2">
+                {assessment.aiAnalysis.agentContributions.map((ac, idx) => (
+                  <div key={idx} className="p-2.5 bg-blue-50/40 dark:bg-blue-950/10 border border-blue-100/50 dark:border-blue-900/30 rounded-xl">
+                    <p className="text-[11px] font-bold text-blue-700 dark:text-blue-300">{ac.agentName}:</p>
+                    <p className="text-[11px] text-text-secondary dark:text-slate-300 mt-0.5 leading-relaxed">{ac.contribution}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
